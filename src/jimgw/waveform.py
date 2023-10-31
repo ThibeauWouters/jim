@@ -1,6 +1,8 @@
 from jaxtyping import Array
 from ripple.waveforms.IMRPhenomD import gen_IMRPhenomD_hphc
 from ripple.waveforms.IMRPhenomPv2 import gen_IMRPhenomPv2_hphc
+# # Tidal waveforms
+from ripple.waveforms.TaylorF2 import gen_TaylorF2_hphc
 import jax.numpy as jnp
 from abc import ABC
 
@@ -67,3 +69,60 @@ class RippleIMRPhenomPv2(Waveform):
         output["p"] = hp
         output["c"] = hc
         return output
+
+class RippleTaylorF2(Waveform):
+
+    f_ref: float
+
+    def __init__(self, f_ref: float = 20.0):
+        self.f_ref = f_ref
+
+    def __call__(self, frequency: Array, params: dict) -> dict:
+        output = {}
+        ra = params["ra"]
+        dec = params["dec"]
+        theta = [
+            params["M_c"],
+            params["eta"],
+            params["s1_z"],
+            params["s2_z"],
+            params["lambda1"],
+            params["lambda2"],
+            params["d_L"],
+            0,
+            params["phase_c"],
+            params["iota"],
+        ]
+        hp, hc = gen_TaylorF2_hphc(frequency, theta, self.f_ref)
+        output["p"] = hp
+        output["c"] = hc
+        return output
+    
+### TODO
+# class RippleIMRPhenomD_NRTidalv2(Waveform):
+
+#     f_ref: float
+
+#     def __init__(self, f_ref: float = 20.0):
+#         self.f_ref = f_ref
+
+#     def __call__(self, frequency: Array, params: dict) -> dict:
+#         output = {}
+#         ra = params["ra"]
+#         dec = params["dec"]
+#         theta = [
+#             params["M_c"],
+#             params["eta"],
+#             params["s1_z"],
+#             params["s2_z"],
+#             params["lambda1"],
+#             params["lambda2"],
+#             params["d_L"],
+#             0,
+#             params["phase_c"],
+#             params["iota"],
+#         ]
+#         hp, hc = gen_NRTidalv2_hphc(frequency, theta, self.f_ref)
+#         output["p"] = hp
+#         output["c"] = hc
+#         return output

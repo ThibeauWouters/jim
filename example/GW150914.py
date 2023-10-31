@@ -9,6 +9,11 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
+# Quickly check presence of CUDA driver as sanity check
+
+import jaxlib
+print(jax.devices())
+
 ###########################################
 ########## First we grab data #############
 ###########################################
@@ -78,3 +83,7 @@ jim = Jim(
 
 jim.maximize_likelihood([prior.xmin, prior.xmax])
 jim.sample(jax.random.PRNGKey(42))
+
+
+
+jim.get_samples()

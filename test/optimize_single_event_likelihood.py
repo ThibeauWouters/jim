@@ -66,11 +66,13 @@ waveform_frequency = waveform_frequency[jnp.isfinite(psd)]
 psd_frequency = psd_frequency[jnp.isfinite(psd)]
 psd = psd[jnp.isfinite(psd)]
 
-from jaxgw.likelihood.detector_projection import construct_arm, detector_tensor, antenna_response, get_detector_response
-from jaxgw.likelihood.utils import inner_product
-from jaxgw.waveform.TaylorF2 import TaylorF2
-from jaxgw.waveform.IMRPhenomB import IMRPhenomB, getPhenomCoef, Lorentzian
-from jaxgw.waveform.IMRPhenomC import IMRPhenomC
+import jimgw
+
+from jimgw.likelihood.detector_projection import construct_arm, detector_tensor, antenna_response, get_detector_response
+from jimgw.likelihood.utils import inner_product
+from jimgw.waveform.TaylorF2 import TaylorF2
+from jimgw.waveform.IMRPhenomB import IMRPhenomB, getPhenomCoef, Lorentzian
+from jimgw.waveform.IMRPhenomC import IMRPhenomC
 from jax.experimental.optimizers import adam,sgd
 from jax import random, grad, jit, vmap, jacfwd, jacrev, value_and_grad
 
