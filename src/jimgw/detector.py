@@ -152,7 +152,8 @@ class GroundBased2G(Detector):
                 f_min: float,
                 f_max: float,
                 psd_pad: int = 16,
-                tukey_alpha: float = 0.2) -> None:
+                tukey_alpha: float = 0.2,
+                load_psd = True) -> None:
         """
         Load data from the detector.
 
@@ -172,6 +173,8 @@ class GroundBased2G(Detector):
             The amount of time to pad the PSD data.
         tukey_alpha : float
             The alpha parameter for the Tukey window.
+        load_psd : bool
+            Indicate whether computing PSD on the fly or not
 
         """
 
@@ -186,15 +189,17 @@ class GroundBased2G(Detector):
         start_psd = int(trigger_time) - gps_start_pad - psd_pad # What does Int do here?
         end_psd = int(trigger_time) + gps_end_pad + psd_pad
 
-        print("Fetching PSD data...")
-        psd_data_td = TimeSeries.fetch_open_data(self.name, start_psd, end_psd, cache=True)
-        psd = psd_data_td.psd(fftlength=segment_length).value # TODO: Check whether this is sright.
+        if load_psd:
+            print("Fetching PSD data...")
+            psd_data_td = TimeSeries.fetch_open_data(self.name, start_psd, end_psd, cache=True)
+            psd = psd_data_td.psd(fftlength=segment_length).value # TODO: Check whether this is sright.
+            self.psd = psd[(freq>f_min)&(freq<f_max)]
 
         print("Finished generating data.")
 
         self.frequencies = freq[(freq>f_min)&(freq<f_max)]
         self.data = data[(freq>f_min)&(freq<f_max)]
-        self.psd = psd[(freq>f_min)&(freq<f_max)]
+        
 
     def fd_response(self, frequency: Array, h_sky: dict, params: dict) -> Array:
         """

@@ -9,6 +9,8 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
+import pickle
+
 # Quickly check presence of CUDA driver as sanity check
 
 import jaxlib
@@ -23,7 +25,7 @@ total_time_start = time.time()
 # first, fetch a 4s segment centered on GW150914
 gps = 1126259462.4
 start = gps - 2
-end = gps + 2
+end   = gps + 2
 fmin = 20.0
 fmax = 1024.0
 
@@ -84,6 +86,15 @@ jim = Jim(
 jim.maximize_likelihood([prior.xmin, prior.xmax])
 jim.sample(jax.random.PRNGKey(42))
 
+# Show results
+result = jim.get_samples()
+print(result)
+jim.print_summary()
 
-
-jim.get_samples()
+### Optional: save results externally
+print("Saving jim object (Normalizing flow)")
+jim.Sampler.save_flow("my_nf_GW150914")
+name ='samples_GW150914.pickle'
+print(f"Saving samples to {name}")
+with open(name, 'wb') as handle:
+    pickle.dump(result, handle, protocol=pickle.HIGHEST_PROTOCOL)

@@ -144,7 +144,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         duration: float = 4,
         post_trigger_duration: float = 2,
         n_walkers: int = 100,
-        n_loops: int = 2000,
+        n_loops: int = 20,
     ) -> None:
         super().__init__(
             detectors, waveform, trigger_time, duration, post_trigger_duration
@@ -154,6 +154,8 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         freq_grid, self.freq_grid_center = self.make_binning_scheme(
             np.array(frequency_original), n_bins + 1
         )
+        print("len(freq_grid)")
+        print(len(freq_grid))
         self.freq_grid_low = freq_grid[:-1]
 
         self.ref_params = self.maximize_likelihood(
@@ -177,11 +179,20 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         f_max = jnp.max(f_valid)
         f_min = jnp.min(f_valid)
 
-        h_sky = h_sky[jnp.where((frequency_original>=f_min) & (frequency_original<=f_max))[0]]
-        h_sky_low = h_sky_low[jnp.where((self.freq_grid_low>=f_min) & (self.freq_grid_low<=f_max))[0]]
-        h_sky_center = h_sky_center[jnp.where((self.freq_grid_center>=f_min) & (self.freq_grid_center<=f_max))[0]]
+        # TODO is this correct?
+        for mode in ["p", "c"]:
+            h_sky[mode] = h_sky[mode][jnp.where((frequency_original>=f_min) & (frequency_original<=f_max))[0]]
+            h_sky_low[mode] = h_sky_low[mode][jnp.where((self.freq_grid_low>=f_min) & (self.freq_grid_low<=f_max))[0]]
+            h_sky_center[mode] = h_sky_center[mode][jnp.where((self.freq_grid_center>=f_min) & (self.freq_grid_center<=f_max))[0]]
+        
+        # ### Original code
+        # h_sky = h_sky[jnp.where((frequency_original>=f_min) & (frequency_original<=f_max))[0]]
+        # h_sky_low = h_sky_low[jnp.where((self.freq_grid_low>=f_min) & (self.freq_grid_low<=f_max))[0]]
+        # h_sky_center = h_sky_center[jnp.where((self.freq_grid_center>=f_min) & (self.freq_grid_center<=f_max))[0]]
+        
 
         frequency_original = frequency_original[jnp.where((frequency_original>=f_min) & (frequency_original<=f_max))[0]]
+        freq_grid = freq_grid[jnp.where((freq_grid>=f_min) & (freq_grid<=f_max))[0]]
         self.freq_grid_low = self.freq_grid_low[jnp.where((self.freq_grid_low>=f_min) & (self.freq_grid_low<=f_max))[0]]
         self.freq_grid_center = self.freq_grid_center[jnp.where((self.freq_grid_center>=f_min) & (self.freq_grid_center<=f_max))[0]]
 
@@ -227,7 +238,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
                 waveform_ref,
                 detector.psd,
                 frequency_original,
-                self.freq_grid_low,
+                freq_grid, # TODO correct? Before: self.freq_grid_low 
                 self.freq_grid_center,
             )
             self.A0_array[detector.name] = A0
@@ -315,7 +326,9 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         return 2 * np.pi * chi * np.sum((f / f_star) ** gamma * np.sign(gamma), axis=1)
 
     def make_binning_scheme(self, freqs, n_bins, chi=1):
-        phase_diff_array = self.max_phase_diff(freqs, freqs[0], freqs[-1], chi=1)
+        print("n_bins")
+        print(n_bins)
+        phase_diff_array = self.max_phase_diff(freqs, freqs[0], freqs[-1], chi=chi)
         bin_f = interp1d(phase_diff_array, freqs)
         f_bins = np.array([])
         for i in np.linspace(phase_diff_array[0], phase_diff_array[-1], n_bins):
@@ -333,6 +346,8 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         df = freqs[1] - freqs[0]
         data_prod = np.array(data * h_ref.conj())
         self_prod = np.array(h_ref * h_ref.conj())
+        print("len(f_bins)")
+        print(len(f_bins))
         for i in range(len(f_bins) - 1):
             f_index = np.where((freqs >= f_bins[i]) & (freqs < f_bins[i + 1]))[0]
             A0_array.append(4 * np.sum(data_prod[f_index] / psd[f_index]) * df)
