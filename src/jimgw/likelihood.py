@@ -144,7 +144,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         duration: float = 4,
         post_trigger_duration: float = 2,
         n_walkers: int = 100,
-        n_loops: int = 20,
+        n_loops: int = 2000,
     ) -> None:
         super().__init__(
             detectors, waveform, trigger_time, duration, post_trigger_duration
