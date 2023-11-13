@@ -84,7 +84,8 @@ class TransientLikelihoodFD(LikelihoodBase):
 
     def evaluate(
         self, params: Array, data: dict
-    ) -> float:  # TODO: Test whether we need to pass data in or with class changes is fine.
+    ) -> float:  
+        # TODO: Test whether we need to pass data in or with class changes is fine.
         """
         Evaluate the likelihood for a given set of parameters.
         """
@@ -114,6 +115,33 @@ class TransientLikelihoodFD(LikelihoodBase):
             )
             log_likelihood += match_filter_SNR - optimal_SNR / 2
         return log_likelihood
+
+    def fisher_information_matrix(self):
+        """
+        Computes the Fisher information matrix and uses it to tune the mass matrix.
+        """
+        
+        n_dim = self.Prior.n_dim
+        mass_matrix = jnp.eye(n_dim) * 3e-3
+        
+        # Failsafe in case the optimal likelihood was not set yet
+        if not(hasattr(self, "best_fit_params")):
+            print("Likelihood was not optimized yet, cannot get Fisher information matrix")
+            print("Running maximize likelihood now to get Fisher information matrix")
+            # TODO is this a good way to do it?
+            self.maximize_likelihood(bounds=[self.Prior.xmin, self.Prior.xmax])
+        
+        # Now do the Fisher matrix computation
+        
+        # Get the hessian of the likelihood
+        fn = lambda x: self.Likelihood.evaluate(x, None)
+        _, dv_log = jax.hessian(fn)
+        
+        # TODO fix the inner product
+        
+        # 4 * jnp.sum((jnp.conj(waveform_dec) * detector.data) / detector.psd * df).real
+        
+        return mass_matrix
 
 
 class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
