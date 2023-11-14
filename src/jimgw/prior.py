@@ -78,6 +78,19 @@ class Prior(Distribution):
         else:
             value = x
         return dict(zip(naming,value))
+    
+    def get_naming(self, transform_name: bool = False):
+        """
+        Get a list of the names of variables, either with or without transformations applied.
+        Parameters
+        -------
+        transform_name: bool
+            Indicates whether to apply the transformation function to the names.    
+        """
+        if transform_name:
+            return [value[0] for value in self.transforms.values()]
+        else:
+            return self.naming
 
 class Uniform(Prior):
 
