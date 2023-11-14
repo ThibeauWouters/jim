@@ -43,7 +43,7 @@ class FisherInformationMatrix:
             result += product
         return result
     
-    def fisher_information_matrix(self,
+    def tune_mass_matrix(self,
                                 prior: Prior, 
                                 waveform_generator: Waveform,
                                 params: dict,
@@ -53,9 +53,8 @@ class FisherInformationMatrix:
         Computes the Fisher information matrix at the params location and uses it to tune the mass matrix.
         """
         
-        # TODO improve this implementation
-        # TODO check the condition number and override certain entries! Cf paper
-        # TODO remove verbose, for debugging
+        # TODO remove verbose if debugging finished
+        # TODO save Fisher information, if used later on?
         
         # Get auxiliary quantities
         n_dim = prior.n_dim
@@ -77,7 +76,7 @@ class FisherInformationMatrix:
             # Sort based on naming, and get as values instead of dict
             dh_dlambda = [dh_dlambda[key] for key in naming]
             
-            # TODO debug
+            # TODO debug, check if derivatives make sense now
             if verbose:
                 print("jnp.shape(dh_dlambda)")
                 print(jnp.shape(dh_dlambda))
@@ -93,8 +92,23 @@ class FisherInformationMatrix:
             # At the end, add it to the overall fisher matrix
             fisher_information_matrix += this_fisher_information_matrix
         
-        # DEUBUGGING
+        self.fisher_information_matrix = fisher_information_matrix 
+        
+        # Go from Fisher information matrix to the tuned mass matrix
+        fisher_diagonal = jnp.diag(fisher_information_matrix)
+        prior_range = prior.xmax - prior.xmin
+        mass_matrix_diagonal = jnp.sqrt(1 / fisher_diagonal) / prior_range
+        
+        # TODO override values should be done more informed?
+        # Clip so that it all scales are below 1 
+        mass_matrix_diagonal = jnp.clip(mass_matrix_diagonal, 0, 1)
+        
+        # Finally, convert from diagonal to matrix
+        mass_matrix = jnp.diag(mass_matrix_diagonal)
+        self.mass_matrix = mass_matrix
+        
         if verbose:
+            # for debugging
             print(jnp.shape(dh_dlambda))
             print("dh_dlambda")
             for i, value in enumerate(dh_dlambda):
@@ -104,27 +118,11 @@ class FisherInformationMatrix:
             print("fisher_information_matrix")
             print(fisher_information_matrix)
             
-            diagonal = jnp.diag(fisher_information_matrix)
-            diagonal= jnp.where(diagonal == 0, 1e-3, diagonal) # Get rid of the zeros
-            print("fisher_information_matrix diagonal")
-            print(diagonal)
+            print("Summary")
+            for name, value in zip(naming, fisher_diagonal):
+                print(f"Parameter: {name}, value Fisher matrix diagonal: {value}")
         
-        self.fisher_information_matrix = fisher_information_matrix 
-        
-        # Also use it to get a tuned mass matrix. For now: diagonal entries only
-        fisher_diagonal = np.diag(fisher_information_matrix)
-        self.mass_matrix = np.diag(fisher_diagonal)
-        
-        print("Parameters:")
-        print(naming)
-        print("Tuned mass matrix: diagonal is:")
-        print(jnp.round(fisher_diagonal, 2))
-        
-        print("Summary")
-        for name, value in zip(naming, jnp.round(fisher_diagonal, 2)):
-            print(f"Parameter: {name}, value Fisher matrix diagonal: {jnp.round(value, 2)}")
-        
-        return fisher_information_matrix
+        return mass_matrix
     
     
     ### TODO Can also implement it with the ensemble average definition? Any benefit?
