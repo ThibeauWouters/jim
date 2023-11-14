@@ -11,6 +11,7 @@ from typing import Callable
 import requests
 import numpy as np
 from scipy.interpolate import interp1d
+from jimgw.waveform import Waveform
 
 DEG_TO_RAD = jnp.pi/180
 
@@ -81,7 +82,7 @@ class GroundBased2G(Detector):
         modes = kwargs.get('mode', 'pc')
 
         self.polarization_mode = [Polarization(m) for m in modes]
-
+        
     @staticmethod
     def _get_arm(lat, lon, tilt, azimuth):
         """
@@ -204,6 +205,13 @@ class GroundBased2G(Detector):
         timeshift = self.delay_from_geocenter(ra, dec, gmst)
         h_detector = jax.tree_util.tree_map(lambda h, antenna: h * antenna * jnp.exp(-2j * jnp.pi * frequency * timeshift), h_sky, antenna_pattern)
         return jnp.sum(jnp.stack(jax.tree_util.tree_leaves(h_detector)), axis=0)
+
+    def _get_h_detector(self, frequencies: Array,  waveform: Waveform, params: dict) -> Array:
+        """Computes the strain at detector from given source."""
+        
+        h_sky = waveform(frequencies, params)
+        h_detector = self.fd_response(frequencies, h_sky, params)
+        return h_detector
 
     def td_response(self, time: Array, h: Array, params: Array) -> Array:
         """

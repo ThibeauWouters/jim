@@ -52,25 +52,14 @@ prior = Uniform(
                  "cos_iota": ("iota",lambda params: jnp.arccos(jnp.arcsin(jnp.sin(params['cos_iota']/2*jnp.pi))*2/jnp.pi)),
                  "sin_dec": ("dec",lambda params: jnp.arcsin(jnp.arcsin(jnp.sin(params['sin_dec']/2*jnp.pi))*2/jnp.pi))} # sin and arcsin are periodize cos_iota and sin_dec
 )
-# likelihood = TransientLikelihoodFD([H1, L1], waveform=waveform, trigger_time=gps, duration=duration, post_trigger_duration=duration/2)
-likelihood = HeterodynedTransientLikelihoodFD([H1, L1], prior=prior, bounds=[prior.xmin, prior.xmax], waveform=waveform, trigger_time=gps, duration=duration, post_trigger_duration=duration/2)
-bestfit_params = likelihood.best_fit_params
+
+likelihood = TransientLikelihoodFD([H1, L1], waveform=waveform, trigger_time=gps, duration=duration, post_trigger_duration=duration/2)
+# likelihood = HeterodynedTransientLikelihoodFD([H1, L1], prior=prior, bounds=[prior.xmin, prior.xmax], waveform=waveform, trigger_time=gps, duration=duration, post_trigger_duration=duration/2)
 
 mass_matrix = jnp.eye(11)
 mass_matrix = mass_matrix.at[1, 1].set(1e-3)
 mass_matrix = mass_matrix.at[5, 5].set(1e-3)
 local_sampler_arg = {"step_size": mass_matrix * 3e-3}
-
-print("Original mass matrix")
-print(mass_matrix)
-
-
-fisher = FisherInformationMatrix(detectors, waveform, gps, duration, duration/2)
-frequencies = H1.frequencies
-fisher_matrix = fisher.fisher_information_matrix(prior, waveform, bestfit_params, frequencies)
-
-print("Fisher information matrix")
-print(fisher_matrix)
 
 jim = Jim(
     likelihood,
@@ -92,7 +81,30 @@ jim = Jim(
     local_sampler_arg=local_sampler_arg,
 )
 
-jim.maximize_likelihood([prior.xmin, prior.xmax])
-jim.sample(jax.random.PRNGKey(42))
+jim.maximize_likelihood([prior.xmin, prior.xmax], seed=42)
 
-jim.print_summary()
+### Get parameter values at which to compute the fisher information matrix "by hand"
+# # Params at which we are going to evaluate:
+# # TODO get good values?
+naming=["M_c", "eta", "s1_z", "s2_z", "d_L", "t_c", "phase_c", "iota", "psi", "ra", "dec"]
+# best_params = jnp.array([28.1, 0.23, 0.22, 0.34, 440.0, 0.0, 2.796, -0.551, 1.695, 1.758, -0.911])
+best_params = jim.best_fit_params
+# params_dict = dict()
+# for key, value in zip(naming, best_params):
+#     params_dict[key] = float(value)
+
+# Get the transformed and named values from the optimizer
+named_params = jim.Prior.add_name(best_params, transform_name=True, transform_value=True)
+
+print("Evaluating Fisher matrix at:")
+print(named_params)
+
+print("Computing Fisher information matrix")
+fisher = FisherInformationMatrix(detectors, waveform, gps, duration, duration/2)
+frequencies = H1.frequencies
+fisher_matrix = fisher.fisher_information_matrix(prior, RippleIMRPhenomD(), named_params, frequencies)
+
+
+# # Start the sampling
+# jim.sample(jax.random.PRNGKey(42))
+# jim.print_summary()

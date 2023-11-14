@@ -1,5 +1,5 @@
 from jaxtyping import Array
-from ripple.waveforms.IMRPhenomD import gen_IMRPhenomD_hphc
+from ripple.waveforms.IMRPhenomD import gen_IMRPhenomD_hphc, gen_IMRPhenomD
 from ripple.waveforms.IMRPhenomPv2 import gen_IMRPhenomPv2_hphc
 import jax.numpy as jnp
 from abc import ABC
@@ -9,9 +9,12 @@ class Waveform(ABC):
     def __init__(self):
         return NotImplemented
 
-    def __call__(self, axis: Array, params: Array) -> Array:
+    def __call__(self, frequency: Array, params: dict) -> Array:
         return NotImplemented
-
+    
+    # TODO necessary?
+    def gen_complex_strain(self, frequency: Array, params: dict) -> Array:
+        return NotImplemented
 
 class RippleIMRPhenomD(Waveform):
 
@@ -38,6 +41,27 @@ class RippleIMRPhenomD(Waveform):
         output["p"] = hp
         output["c"] = hc
         return output
+    
+    
+    def gen_complex_strain(self, frequency: Array, theta: Array) -> Array:
+        
+        return gen_IMRPhenomD(frequency, theta, self.f_ref)
+    
+    # # TODO necessary?
+    # def gen_complex_strain(self, frequency: Array, params: dict) -> Array:
+    #     ra = params["ra"]
+    #     dec = params["dec"]
+    #     theta = [
+    #         params["M_c"],
+    #         params["eta"],
+    #         params["s1_z"],
+    #         params["s2_z"],
+    #         params["d_L"],
+    #         0,
+    #         params["phase_c"],
+    #         params["iota"],
+    #     ]
+    #     return gen_IMRPhenomD(frequency, theta, self.f_ref)
 
 
 class RippleIMRPhenomPv2(Waveform):
