@@ -1,6 +1,7 @@
 from jimgw.likelihood import LikelihoodBase
 from flowMC.sampler.Sampler import Sampler
 from flowMC.sampler.MALA import MALA
+from flowMC.sampler.MMALA import MMALA
 from flowMC.nfmodel.rqSpline import MaskedCouplingRQSpline
 from flowMC.utils.PRNG_keys import initialize_rng_keys
 from flowMC.utils.EvolutionaryOptimizer import EvolutionaryOptimizer
@@ -15,7 +16,8 @@ class Jim(object):
     
     """
 
-    def __init__(self, likelihood: LikelihoodBase, prior: Prior, **kwargs):
+    # TODO make Jim accept more easily other local samplers than 
+    def __init__(self, likelihood: LikelihoodBase, prior: Prior, G: Array=None, **kwargs):
         self.Likelihood = likelihood
         self.Prior = prior
         seed = kwargs.get("seed", 0)
@@ -28,7 +30,10 @@ class Jim(object):
 
         local_sampler_arg = kwargs.get("local_sampler_arg", {})
 
-        local_sampler = MALA(self.posterior, True, local_sampler_arg) # Remember to add routine to find automated mass matrix
+        if G is None:
+            local_sampler = MALA(self.posterior, True, local_sampler_arg)
+        else:
+            local_sampler = MMALA(self.posterior, True, local_sampler_arg, G)
 
         model = MaskedCouplingRQSpline(self.Prior.n_dim, num_layers, hidden_size, num_bins, rng_key_set[-1])
         self.Sampler = Sampler(

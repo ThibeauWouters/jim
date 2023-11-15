@@ -8,6 +8,8 @@ from jimgw.prior import Uniform
 import jax.numpy as jnp
 import jax
 
+from flowMC.sampler import MMALA, Sampler
+
 jax.config.update("jax_enable_x64", True)
 
 ###########################################
@@ -84,7 +86,7 @@ jim = Jim(
 # We are going to compute the FIM at the point obtained by the Evolutionary optimizer
 jim.maximize_likelihood([prior.xmin, prior.xmax], seed=42)
 best_params = jim.best_fit_params
-# naming=prior.get_naming(transform_name=True)
+naming=prior.get_naming(transform_name=True)
 # Get the transformed and named values from the optimizer
 named_params = jim.Prior.add_name(best_params, transform_name=True, transform_value=True)
 
@@ -96,19 +98,36 @@ fisher = FisherInformationMatrix(detectors, waveform, gps, duration, duration/2)
 frequencies = H1.frequencies
 mass_matrix = fisher.tune_mass_matrix(prior, RippleIMRPhenomD(), named_params, frequencies)
 
-mass_matrix_diag = jnp.diag(mass_matrix)
-print("mass_matrix_diag")
-print(mass_matrix_diag)
-s_vec = jnp.sqrt(mass_matrix_diag)
-print("s_vec")
-print(s_vec)
+fisher_information_matrix = fisher.fisher_information_matrix
+tc_index = naming.index("t_c")
+fisher_information_matrix = fisher_information_matrix.at[tc_index, tc_index].set(1e-5)
 
-# TODO need to find a way to update the existing jim sampler, or to initialize it immediately with the tuned mass matrix 
-print("--- Changing jim object to new mass matrix")
-local_sampler_arg = {"step_size": mass_matrix * 1}
+print("fisher_information_matrix")
+print(fisher_information_matrix)
 
-# TODO check this implementation, and improve jim source code to improve upon this
-jim.Sampler.local_sampler.params = local_sampler_arg
+print("--- New object with MMALA")
+
+jim = Jim(
+    likelihood,
+    prior,
+    G=fisher_information_matrix,
+    n_loop_training=10,
+    n_loop_production=10,
+    n_local_steps=150,
+    n_global_steps=150,
+    n_chains=500,
+    n_epochs=50,
+    learning_rate=0.001,
+    max_samples=45000,
+    momentum=0.9,
+    batch_size=50000,
+    use_global=True,
+    keep_quantile=0.0,
+    train_thinning=1,
+    output_thinning=10,
+    local_sampler_arg=local_sampler_arg
+)
+
 
 # Start the sampling
 jim.sample(jax.random.PRNGKey(42))
