@@ -99,9 +99,12 @@ class FisherInformationMatrix:
         prior_range = prior.xmax - prior.xmin
         mass_matrix_diagonal = jnp.sqrt(1 / fisher_diagonal) / prior_range
         
-        # TODO override values should be done more informed?
         # Clip so that it all scales are below 1 
         mass_matrix_diagonal = jnp.clip(mass_matrix_diagonal, 0, 1)
+        
+        # TODO override values should be done more informed?
+        idx = naming.index("t_c") # t_c is uninformed, set to default value instead
+        mass_matrix_diagonal = mass_matrix_diagonal.at[idx].set(1e-5)
         
         # Finally, convert from diagonal to matrix
         mass_matrix = jnp.diag(mass_matrix_diagonal)
