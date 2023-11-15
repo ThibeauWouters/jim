@@ -103,9 +103,9 @@ s_vec = jnp.sqrt(mass_matrix_diag)
 print("s_vec")
 print(s_vec)
 
+# TODO need to find a way to update the existing jim sampler, or to initialize it immediately with the tuned mass matrix 
 print("--- Making new jim object with tuned mass matrix")
-
-local_sampler_arg = {"step_size": mass_matrix * 3e-3}
+local_sampler_arg = {"step_size": mass_matrix * 1}
 jim = Jim(
     likelihood,
     prior,
