@@ -11,6 +11,7 @@ from flowMC.utils.EvolutionaryOptimizer import EvolutionaryOptimizer
 from jimgw.prior import Prior
 from jimgw.likelihood import LikelihoodBase
 from jimgw.waveform import Waveform, RippleIMRPhenomD
+from scipy.stats import norm
 
 
 # TODO find maybe a better spot to place this?
@@ -44,11 +45,11 @@ class FisherInformationMatrix:
         return result
     
     def tune_mass_matrix(self,
-                                prior: Prior, 
-                                waveform_generator: Waveform,
-                                params: dict,
-                                frequencies: Array,
-                                verbose=False) -> Array:
+                        prior: Prior, 
+                        waveform_generator: Waveform,
+                        params: dict,
+                        frequencies: Array,
+                        verbose=False) -> Array:
         """
         Computes the Fisher information matrix at the params location and uses it to tune the mass matrix.
         """
@@ -128,41 +129,71 @@ class FisherInformationMatrix:
         return mass_matrix
     
     
-    ### TODO Can also implement it with the ensemble average definition? Any benefit?
-    # def new_fisher_information_matrix(self,
-    #                             prior: Prior, 
-    #                             likelihood: LikelihoodBase,
-    #                             params: Array,
-    #                             points: Array,
-    #                             diagonal_only: bool=True) -> Array:
-    #     """
-    #     Computes the Fisher information matrix at the params location, but now using the likelihood function and uses it to tune the mass matrix.
+    ## TODO Can also implement it with the ensemble average definition? Any benefit?
+    def new_fisher_information_matrix(self,
+                        prior: Prior, 
+                        waveform_generator: Waveform,
+                        params: dict,
+                        frequencies: Array,
+                        n_samples: int = 100,
+                        verbose: bool=False) -> Array:
+        """
+        Computes the Fisher information matrix at the params location, but now using the likelihood function and uses it to tune the mass matrix.
         
-    #     Points are used to perform the ensemble average. 
-    #     """
+        Points are used to perform the ensemble average. 
+        """
         
-    #     n_dim = prior.n_dim
+        n_dim = prior.n_dim
+        df = frequencies[1] - frequencies[0]
+        fisher_information_matrix = jnp.zeros((n_dim, n_dim))
         
-    #     # Lambda function that gets complex strain h when given parameter dict x
-    #     fn = lambda x: - likelihood.evaluate(params, None)
-    #     likelihood_hessian = jax.hessian(fn)
+        # def get_gamma_estimate(data, params, detector):
+        #     # Evaluate a single term in the discrete approximation of the FIM
+        #     fn_h = lambda x: detector._get_h_detector(frequencies, waveform_generator, x)
+        #     sq_diff = lambda x: jnp.abs(data - fn_h(x)) ** 2
+        #     hessian = jax.hessian(sq_diff)
+        #     hessian_values = hessian(params)
+        #     # Sum over frequencies
+        #     term = jnp.sum(2 * df / detector.psd * hessian_values)
+        #     return term
         
-    #     # Ensemble average
-    #     hessian_values = jax.vmap(likelihood_hessian)(points)
+        def get_hessian_values(data, params, detector):
+            h_detector = lambda x: detector._get_h_detector(frequencies, waveform_generator, x)
+            sq_diff = lambda x: jnp.abs(data - h_detector(x)) ** 2
+            hessian = jax.hessian(sq_diff)
+            hessian_values = hessian(params)
+            
+            return hessian_values
+            
         
-    #     fisher_information_matrix = jnp.zeros((n_dim, n_dim))
-        
-    #     weights = None
-        
-    #     weighted_average = jnp.sum(jnp.dot(weights, hessian_values)) / jnp.sum(weights)
+        for detector in self.detectors:
+            # Build the argument of the FIM expectation value (x are waveform parameters below)
+            # TODO is the cov right in multivariate normal, or need sqrt?
+            
+            print(f"Getting hessian for detector {detector.name}")
+            h_detector = lambda x: detector._get_h_detector(frequencies, waveform_generator, x)
+            h = h_detector(params)
+            h_np = np.asarray(h, dtype=np.complex_)
+            scale = 2 * np.sqrt(detector.psd) / np.sqrt(df)
+            # Single 
+            sample_d = [norm.rvs(loc=h_np[i], scale = scale[i], size=1) for i in range(len(h_np))]
+            sample_d = jnp.asarray(sample_d)
+            print("sample_d shape")
+            print(jnp.shape(sample_d))
+            fn_get_hessian_values = lambda d: get_hessian_values(d, params, detector)
+            get_hessian_values_vmap = jax.vmap(fn_get_hessian_values)
+            hessian_values = get_hessian_values_vmap(sample_d)
+            term = jnp.mean(jnp.sum(2 * df / detector.psd * hessian_values, axis = 1))
+            fisher_information_matrix += term
+            
                 
-    #     # Invert it to get the tuned mass matrix
-    #     print("fisher_information_matrix")
-    #     print(fisher_information_matrix)
+        # Invert it to get the tuned mass matrix
+        if verbose:
+                
+            print("fisher_information_matrix")
+            print(fisher_information_matrix)
+            self.fisher_information_matrix = fisher_information_matrix
+            print("fisher_information_matrix diagonal")
+            print(jnp.diag(fisher_information_matrix))
         
-    #     print("fisher_information_matrix diagonal")
-    #     print(jnp.diag(fisher_information_matrix))
-        
-    #     inverse = jnp.linalg.inv(fisher_information_matrix)
-        
-    #     return inverse
+        return fisher_information_matrix

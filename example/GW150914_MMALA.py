@@ -107,12 +107,21 @@ print(fisher_information_matrix)
 
 print("--- New object with MMALA")
 
+fisher_information_matrix = fisher_information_matrix.at[tc_index, tc_index].set(1e-5)
+matrix = jnp.diag(jnp.diag(fisher_information_matrix))
+print(matrix)
+
+mass_matrix = jnp.eye(11)
+mass_matrix = mass_matrix.at[1, 1].set(1e-3)
+mass_matrix = mass_matrix.at[5, 5].set(1e-3)
+local_sampler_arg = {"step_size": mass_matrix * 3e-3}
+
 jim = Jim(
     likelihood,
     prior,
-    G=fisher_information_matrix,
-    n_loop_training=10,
-    n_loop_production=10,
+    G=matrix,
+    n_loop_training=100,
+    n_loop_production=50,
     n_local_steps=150,
     n_global_steps=150,
     n_chains=500,
