@@ -16,7 +16,7 @@ class Jim(object):
     
     """
 
-    # TODO make Jim accept more easily other local samplers than 
+    # TODO make Jim accept more easily other local samplers than MALA
     def __init__(self, likelihood: LikelihoodBase, prior: Prior, G: Array=None, **kwargs):
         self.Likelihood = likelihood
         self.Prior = prior
