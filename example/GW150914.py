@@ -7,6 +7,8 @@ from jimgw.prior import Uniform
 import jax.numpy as jnp
 import jax
 
+from flowMC.utils.diagnosis import Diagnosis
+
 jax.config.update("jax_enable_x64", True)
 
 ###########################################
@@ -59,8 +61,9 @@ local_sampler_arg = {"step_size": mass_matrix * 3e-3}
 jim = Jim(
     likelihood,
     prior,
-    n_loop_training=200,
-    n_loop_production=10,
+    n_loop_pretraining=100,
+    n_loop_training=100,
+    n_loop_production=100,
     n_local_steps=150,
     n_global_steps=150,
     n_chains=500,
@@ -74,7 +77,16 @@ jim = Jim(
     train_thinning=1,
     output_thinning=10,
     local_sampler_arg=local_sampler_arg,
+    verbose=False
 )
 
 jim.maximize_likelihood([prior.xmin, prior.xmax])
 jim.sample(jax.random.PRNGKey(42))
+
+
+print("Creating diagnosis")
+diagnosis = Diagnosis(jim.Sampler, "./outdir_GW150914_pretraining")
+
+diagnosis.plot_summary("pretraining")
+diagnosis.plot_summary("training")
+diagnosis.plot_summary("production")
