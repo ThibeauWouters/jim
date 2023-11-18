@@ -81,9 +81,14 @@ class Jim(object):
 
         """
 
-        train_summary = self.Sampler.get_sampler_state(training=True)
-        production_summary = self.Sampler.get_sampler_state(training=False)
+        pretrain_summary = self.Sampler.get_sampler_state("pretraining")
+        train_summary = self.Sampler.get_sampler_state("training")
+        production_summary = self.Sampler.get_sampler_state("production")
 
+        pretraining_chain: Array = pretrain_summary["chains"]
+        pretraining_log_prob: Array = pretrain_summary["log_prob"]
+        pretraining_local_acceptance: Array = pretrain_summary["local_accs"]
+        
         training_chain: Array = train_summary["chains"]
         training_log_prob: Array = train_summary["log_prob"]
         training_local_acceptance: Array = train_summary["local_accs"]
@@ -95,6 +100,14 @@ class Jim(object):
         production_local_acceptance: Array = production_summary["local_accs"]
         production_global_acceptance: Array = production_summary["global_accs"]
 
+        print("Pretraining summary")
+        print('=' * 10)
+        for index in range(len(self.Prior.naming)):
+            print(f"{self.Prior.naming[index]}: {pretraining_chain[:, :, index].mean():.3f} +/- {pretraining_chain[:, :, index].std():.3f}")
+        print(f"Log probability: {pretraining_log_prob.mean():.3f} +/- {pretraining_log_prob.std():.3f}") 
+        print(f"Local acceptance: {pretraining_local_acceptance.mean():.3f} +/- {pretraining_local_acceptance.std():.3f}")
+        # print(f"Global acceptance: {pretraining_global_acceptance.mean():.3f} +/- {pretraining_global_acceptance.std():.3f}")
+        
         print("Training summary")
         print('=' * 10)
         for index in range(len(self.Prior.naming)):

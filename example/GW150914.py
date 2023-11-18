@@ -8,6 +8,7 @@ import jax.numpy as jnp
 import jax
 
 from flowMC.utils.diagnosis import Diagnosis
+from flowMC.utils import gelman_rubin
 
 jax.config.update("jax_enable_x64", True)
 
@@ -62,11 +63,11 @@ jim = Jim(
     likelihood,
     prior,
     n_loop_pretraining=100,
-    n_loop_training=100,
-    n_loop_production=100,
+    n_loop_training=200,
+    n_loop_production=20,
     n_local_steps=150,
     n_global_steps=150,
-    n_chains=500,
+    n_chains=100,
     n_epochs=50,
     learning_rate=0.001,
     max_samples=45000,
@@ -82,11 +83,21 @@ jim = Jim(
 
 jim.maximize_likelihood([prior.xmin, prior.xmax])
 jim.sample(jax.random.PRNGKey(42))
-
+jim.print_summary()
 
 print("Creating diagnosis")
-diagnosis = Diagnosis(jim.Sampler, "./outdir_GW150914_pretraining")
+diagnosis = Diagnosis(jim.Sampler, outdir_name="./outdir_GW150914_pretraining/")
 
 diagnosis.plot_summary("pretraining")
 diagnosis.plot_summary("training")
 diagnosis.plot_summary("production")
+
+print("Pretraining gelman-rubin")
+result = gelman_rubin(jim.Sampler.get_sampler_state("pretraining")["chains"])
+print(result)
+print("Training gelman-rubin")
+result = gelman_rubin(jim.Sampler.get_sampler_state("training")["chains"])
+print(result)
+print("Production gelman-rubin")
+result = gelman_rubin(jim.Sampler.get_sampler_state("production")["chains"])
+print(result)
