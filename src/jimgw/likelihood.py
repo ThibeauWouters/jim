@@ -189,7 +189,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         f_max = jnp.max(f_valid)
         f_min = jnp.min(f_valid)
         
-        # TODO replace this
+        # TODO move this
         def get_mask(f: Array, f_min: float, f_max: float) -> Array:
             """Slice an array f by containing all elements in f that are greater or equal to f_min, and all elements smaller than or equal
             to f_max, and the element just right after that.
@@ -272,7 +272,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
                 detector.psd,
                 frequency_original,
                 freq_grid,
-                self.freq_grid_low,
+                # self.freq_grid_low,
                 self.freq_grid_center,
             )
             self.A0_array[detector.name] = A0
