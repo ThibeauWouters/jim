@@ -239,8 +239,8 @@ jim = Jim(
     likelihood,
     prior,
     n_loop_pretraining=0,
-    n_loop_training=50,
-    n_loop_production=50,
+    n_loop_training=20,
+    n_loop_production=20,
     n_local_steps=200,
     n_global_steps=200,
     n_chains=n_chains,
@@ -252,7 +252,7 @@ jim = Jim(
     use_global=True,
     keep_quantile=0.0,
     train_thinning=40,
-    output_thinning=10,
+    output_thinning=1,
     local_sampler_arg=local_sampler_arg,
     outdir_name=outdir_name
 )
