@@ -145,6 +145,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         post_trigger_duration: float = 2,
         n_walkers: int = 100,
         n_loops: int = 200,
+        ref_params: Array = None
     ) -> None:
         super().__init__(
             detectors, waveform, trigger_time, duration, post_trigger_duration
@@ -158,10 +159,17 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         )
         self.freq_grid_low = freq_grid[:-1]
 
-        self.ref_params = self.maximize_likelihood(
-            bounds=bounds, prior=prior, set_nwalkers=n_walkers, n_loops=n_loops
-        )
-
+        if ref_params is None:
+            ref_params = self.maximize_likelihood(
+                bounds=bounds, prior=prior, set_nwalkers=n_walkers, n_loops=n_loops
+            )
+        else:
+            # TODO change so that users have to give the dictionary rather than the array itself to avoid having to do the tranformations here.
+            # Convert the given ref params, which are given as array, to a dictionary
+            ref_params = prior.add_name(ref_params, transform_name=True, transform_value=False)
+            print("Ref params are now:")
+            print(ref_params)
+        self.ref_params = ref_params
         self.ref_params["gmst"] = self.gmst
 
         self.waveform_low_ref = {}

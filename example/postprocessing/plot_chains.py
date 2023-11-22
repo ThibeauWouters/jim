@@ -25,8 +25,8 @@ default_corner_kwargs = dict(bins=40,
                         save=False)
 
 params = {
-    "axes.labelsize": 22,
-    "axes.titlesize": 22,
+    "axes.labelsize": 30,
+    "axes.titlesize": 30,
     "text.usetex": True,
     "font.family": "serif",
     # "font.serif": "cmr10",
@@ -63,9 +63,9 @@ def get_chains(event, data_path = "../../data/"):
         flowMC_chains[:,9] = np.arcsin(flowMC_chains[:,9])
     return flowMC_chains, bilby_chains
 
-### Fetch and check data
+### Fetch and check data (choose training or production run)
 
-which = "training" # choose your dataset here
+which = "production" 
 filename = f"../GW170817_reproduction/outdir/samples_{which}_GW170817_IMRPhenomD.pickle"
 print("Loading samples...")
 with open(filename, 'rb') as handle:
@@ -74,7 +74,8 @@ print("Loading complete")
     
 print("Printing samples")
 keys = list(loaded_samples.keys())
-n_dim = len(keys) - 1 # will ignore t_c below
+# We will ignore t_c in the plots
+n_dim = len(keys) - 1 
 
 samples = []
 for key in keys:
@@ -83,25 +84,27 @@ for key in keys:
     else:
         myarray = loaded_samples[key].flatten()
         samples.append(myarray)
-        print(np.shape(myarray))
         
 samples = jnp.array(samples)
 samples = jnp.swapaxes(samples, 0, 1)
-print(samples)
-print(jnp.shape(samples))
 
 ### Plotting my chains
 
 samples = np.asarray(samples)
 fig = corner.corner(samples, labels = labels, hist_kwargs={'density': True}, **default_corner_kwargs)
-fig.savefig("my_samples.png", bbox_inches='tight')
+name = f"my_samples_{which}.png"
+print(f"Saving plot of chains to {name}")
+fig.savefig(name, bbox_inches='tight')
 
 ### Plotting other chains
 
-# print("Getting TurboPE chains")
-# flowMC_chains, bilby_chains = get_chains('GW170817')
-# print("Plotting TurboPE chains")
-# fig = corner.corner(flowMC_chains, labels = labels, hist_kwargs={'density': True}, **default_corner_kwargs)
-# corner.corner(bilby_chains, fig=fig, hist_kwargs={'density': True}, **default_corner_kwargs)
-# fig.savefig("turboPE_test.png", bbox_inches='tight')
-# print("Done")
+corner_kwargs = default_corner_kwargs
+
+print("Getting TurboPE chains")
+flowMC_chains, bilby_chains = get_chains('GW170817')
+print("Plotting TurboPE chains")
+fig = corner.corner(flowMC_chains, labels = labels, hist_kwargs={'density': True}, **corner_kwargs)
+corner_kwargs["color"] = "red"
+corner.corner(bilby_chains, fig=fig, hist_kwargs={'density': True}, **corner_kwargs)
+fig.savefig("turboPE_test.png", bbox_inches='tight')
+print("Done")
