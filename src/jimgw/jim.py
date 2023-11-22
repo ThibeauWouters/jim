@@ -100,30 +100,32 @@ class Jim(object):
         production_local_acceptance: Array = production_summary["local_accs"]
         production_global_acceptance: Array = production_summary["global_accs"]
 
-        print("Pretraining summary")
-        print('=' * 10)
-        for index in range(len(self.Prior.naming)):
-            print(f"{self.Prior.naming[index]}: {pretraining_chain[:, :, index].mean():.3f} +/- {pretraining_chain[:, :, index].std():.3f}")
-        print(f"Log probability: {pretraining_log_prob.mean():.3f} +/- {pretraining_log_prob.std():.3f}") 
-        print(f"Local acceptance: {pretraining_local_acceptance.mean():.3f} +/- {pretraining_local_acceptance.std():.3f}")
-        # print(f"Global acceptance: {pretraining_global_acceptance.mean():.3f} +/- {pretraining_global_acceptance.std():.3f}")
+        if self.Sampler.n_loop_pretraining > 0:
+            print("Pretraining summary")
+            print('=' * 10)
+            for index in range(len(self.Prior.naming)):
+                print(f"{self.Prior.naming[index]}: {pretraining_chain[:, :, index].mean():.3f} +/- {pretraining_chain[:, :, index].std():.3f}")
+            print(f"Log probability: {pretraining_log_prob.mean():.3f} +/- {pretraining_log_prob.std():.3f}") 
+            print(f"Local acceptance: {pretraining_local_acceptance.mean():.3f} +/- {pretraining_local_acceptance.std():.3f}")
         
-        print("Training summary")
-        print('=' * 10)
-        for index in range(len(self.Prior.naming)):
-            print(f"{self.Prior.naming[index]}: {training_chain[:, :, index].mean():.3f} +/- {training_chain[:, :, index].std():.3f}")
-        print(f"Log probability: {training_log_prob.mean():.3f} +/- {training_log_prob.std():.3f}") 
-        print(f"Local acceptance: {training_local_acceptance.mean():.3f} +/- {training_local_acceptance.std():.3f}")
-        print(f"Global acceptance: {training_global_acceptance.mean():.3f} +/- {training_global_acceptance.std():.3f}")
-        print(f"Max loss: {training_loss.max():.3f}, Min loss: {training_loss.min():.3f}")
+        if self.Sampler.n_loop_training > 0 and self.Sampler.use_global:
+            print("Training summary")
+            print('=' * 10)
+            for index in range(len(self.Prior.naming)):
+                print(f"{self.Prior.naming[index]}: {training_chain[:, :, index].mean():.3f} +/- {training_chain[:, :, index].std():.3f}")
+            print(f"Log probability: {training_log_prob.mean():.3f} +/- {training_log_prob.std():.3f}") 
+            print(f"Local acceptance: {training_local_acceptance.mean():.3f} +/- {training_local_acceptance.std():.3f}")
+            print(f"Global acceptance: {training_global_acceptance.mean():.3f} +/- {training_global_acceptance.std():.3f}")
+            print(f"Max loss: {training_loss.max():.3f}, Min loss: {training_loss.min():.3f}")
 
-        print("Production summary")
-        print('=' * 10)
-        for index in range(len(self.Prior.naming)):
-            print(f"{self.Prior.naming[index]}: {production_chain[:, :, index].mean():.3f} +/- {production_chain[:, :, index].std():.3f}")
-        print(f"Log probability: {production_log_prob.mean():.3f} +/- {production_log_prob.std():.3f}")
-        print(f"Local acceptance: {production_local_acceptance.mean():.3f} +/- {production_local_acceptance.std():.3f}")
-        print(f"Global acceptance: {production_global_acceptance.mean():.3f} +/- {production_global_acceptance.std():.3f}")
+        if self.Sampler.n_loop_production > 0:
+            print("Production summary")
+            print('=' * 10)
+            for index in range(len(self.Prior.naming)):
+                print(f"{self.Prior.naming[index]}: {production_chain[:, :, index].mean():.3f} +/- {production_chain[:, :, index].std():.3f}")
+            print(f"Log probability: {production_log_prob.mean():.3f} +/- {production_log_prob.std():.3f}")
+            print(f"Local acceptance: {production_local_acceptance.mean():.3f} +/- {production_local_acceptance.std():.3f}")
+            print(f"Global acceptance: {production_global_acceptance.mean():.3f} +/- {production_global_acceptance.std():.3f}")
 
     def get_samples(self, training: bool = False) -> dict:
         """
