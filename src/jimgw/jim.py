@@ -136,9 +136,9 @@ class Jim(object):
             Array: Samples
         """
         if training:
-            chains = self.Sampler.get_sampler_state(training=True)["chains"]
+            chains = self.Sampler.get_sampler_state("training")["chains"]
         else:
-            chains = self.Sampler.get_sampler_state(training=False)["chains"]
+            chains = self.Sampler.get_sampler_state("production")["chains"]
 
         chains = self.Prior.add_name(chains.transpose(2,0,1), transform_name=True)
         return chains
