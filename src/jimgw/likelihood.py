@@ -170,6 +170,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
             print("Ref params are now:")
             print(ref_params)
         self.ref_params = ref_params
+
         self.ref_params["gmst"] = self.gmst
 
         self.waveform_low_ref = {}
@@ -224,6 +225,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         self.freq_grid_center = self.freq_grid_center[mask_heterodyne_center]
 
         # Get phase shifts to align time of coalescence
+
         align_time = jnp.exp(
             -1j
             * 2
@@ -270,6 +272,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
                 detector.psd,
                 frequency_original,
                 freq_grid,
+                self.freq_grid_low,
                 self.freq_grid_center,
             )
             self.A0_array[detector.name] = A0
@@ -299,7 +302,6 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
                 detector.fd_response(frequencies_center, waveform_sky_center, params)
                 * align_time_center
             )
-            
             r0 = waveform_center / self.waveform_center_ref[detector.name]
             r1 = (waveform_low / self.waveform_low_ref[detector.name] - r0) / (
                 frequencies_low - frequencies_center
