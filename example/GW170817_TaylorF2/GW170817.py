@@ -2,11 +2,9 @@
 from jimgw.jim import Jim
 from jimgw.detector import H1, L1, V1
 from jimgw.likelihood import HeterodynedTransientLikelihoodFD, TransientLikelihoodFD
-from jimgw.waveform import RippleIMRPhenomD
+from jimgw.waveform import RippleIMRPhenomD, RippleTaylorF2
 from jimgw.prior import Uniform
 # ripple
-from ripple.waveforms.IMRPhenomD import gen_IMRPhenomD, gen_IMRPhenomD_hphc
-from ripple import Mc_eta_to_ms
 # flowmc
 from flowMC.utils.PRNG_keys import initialize_rng_keys
 # jax
