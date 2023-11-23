@@ -72,7 +72,6 @@ with open(filename, 'rb') as handle:
     loaded_samples = pickle.load(handle) 
 print("Loading complete")
     
-print("Printing samples")
 keys = list(loaded_samples.keys())
 # We will ignore t_c in the plots
 n_dim = len(keys) - 1 
@@ -84,27 +83,24 @@ for key in keys:
     else:
         myarray = loaded_samples[key].flatten()
         samples.append(myarray)
-        
-samples = jnp.array(samples)
-samples = jnp.swapaxes(samples, 0, 1)
 
-### Plotting my chains
-
+# To avoid complaints from corner:
+if np.shape(samples)[0] < np.shape(samples)[1]:
+    samples = np.swapaxes(samples, 0, 1)
 samples = np.asarray(samples)
-fig = corner.corner(samples, labels = labels, hist_kwargs={'density': True}, **default_corner_kwargs)
+print(np.shape(samples))
+
+### Get chains from TurboPE
+
+flowMC_chains, bilby_chains = get_chains('GW170817')
+
+### Plotting chains
+
 name = f"my_samples_{which}.png"
 print(f"Saving plot of chains to {name}")
-fig.savefig(name, bbox_inches='tight')
-
-### Plotting other chains
-
 corner_kwargs = default_corner_kwargs
-
-print("Getting TurboPE chains")
-flowMC_chains, bilby_chains = get_chains('GW170817')
-print("Plotting TurboPE chains")
-fig = corner.corner(flowMC_chains, labels = labels, hist_kwargs={'density': True}, **corner_kwargs)
+fig = corner.corner(samples, labels = labels, hist_kwargs={'density': True}, **default_corner_kwargs)
 corner_kwargs["color"] = "red"
-corner.corner(bilby_chains, fig=fig, hist_kwargs={'density': True}, **corner_kwargs)
-fig.savefig("turboPE_test.png", bbox_inches='tight')
+corner.corner(flowMC_chains, labels = labels, fig=fig, hist_kwargs={'density': True}, **corner_kwargs)
+fig.savefig(name, bbox_inches='tight')  
 print("Done")

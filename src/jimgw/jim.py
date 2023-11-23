@@ -1,54 +1,62 @@
-from jimgw.likelihood import LikelihoodBase
-from flowMC.sampler.Sampler import Sampler
-from flowMC.sampler.MALA import MALA
-from flowMC.sampler.MMALA import MMALA
-from flowMC.nfmodel.rqSpline import MaskedCouplingRQSpline
-from flowMC.utils.PRNG_keys import initialize_rng_keys
-from flowMC.utils.EvolutionaryOptimizer import EvolutionaryOptimizer
-from jimgw.prior import Prior
 from jaxtyping import Array
 import jax
 import jax.numpy as jnp
 
+from flowMC.sampler.Sampler import Sampler
+from flowMC.sampler.MALA import MALA
+from flowMC.nfmodel.rqSpline import MaskedCouplingRQSpline
+from flowMC.utils.EvolutionaryOptimizer import EvolutionaryOptimizer
+from flowMC.utils.PRNG_keys import initialize_rng_keys
+
+from jimgw.prior import Prior
+from jimgw.likelihood import LikelihoodBase
+from jimgw.hyperparameters import jim_default_hyperparameters
+
+import numpy as np
+
 class Jim(object):
     """
     Master class for interfacing with flowMC
-    
     """
 
-    # TODO make Jim accept more easily other local samplers than MALA
-    def __init__(self, likelihood: LikelihoodBase, prior: Prior, G: Array=None, **kwargs):
+    # TODO make hyperparameters more grouped together
+    def __init__(self, likelihood: LikelihoodBase, prior: Prior, **kwargs):
         self.Likelihood = likelihood
         self.Prior = prior
-        seed = kwargs.get("seed", 0)
-        n_chains = kwargs.get("n_chains", 20)
+        
+        # Set and override any given hyperparameters, and save as attribute
+        self.hyperparameters = jim_default_hyperparameters
+        hyperparameter_names = list(self.hyperparameters.keys())
+        
+        for key, value in kwargs.items():
+            if key in hyperparameter_names:
+                self.hyperparameters[key] = value
+        
+        for key, value in self.hyperparameters.items():
+            setattr(self, key, value)
+            
+        self.rng_key_set = initialize_rng_keys(self.hyperparameters["n_chains"], seed=self.hyperparameters["seed"])
+        local_sampler = MALA(self.posterior, True, self.local_sampler_arg)
 
-        rng_key_set = initialize_rng_keys(n_chains, seed=seed)
-        num_layers = kwargs.get("num_layers", 10)
-        hidden_size = kwargs.get("hidden_size", [128,128])
-        num_bins = kwargs.get("num_bins", 8)
-
-        local_sampler_arg = kwargs.get("local_sampler_arg", {})
-
-        if G is None:
-            local_sampler = MALA(self.posterior, True, local_sampler_arg)
-        else:
-            local_sampler = MMALA(self.posterior, True, local_sampler_arg, G)
-
-        model = MaskedCouplingRQSpline(self.Prior.n_dim, num_layers, hidden_size, num_bins, rng_key_set[-1])
+        model = MaskedCouplingRQSpline(self.Prior.n_dim, self.num_layers, self.hidden_size, self.num_bins, self.rng_key_set[-1])
         self.Sampler = Sampler(
             self.Prior.n_dim,
-            rng_key_set,
+            self.rng_key_set,
             None,
             local_sampler,
             model,
             **kwargs)
         
+        
 
-    def maximize_likelihood(self, bounds: tuple[Array,Array], set_nwalkers: int = 100, n_loops: int = 200, seed = 92348):
+    def maximize_likelihood(self, bounds: tuple[Array,Array], seed = 92348):
         bounds = jnp.array(bounds).T
         key = jax.random.PRNGKey(seed)
-        set_nwalkers = set_nwalkers
+        
+        set_nwalkers = self.n_walkers_maximize_likelihood
+        n_loops = self.n_loops_maximize_likelihood
+        # set_nwalkers = set_nwalkers
+        
         initial_guess = self.Prior.sample(key, set_nwalkers)
 
         y = lambda x: -self.posterior(x, None)
@@ -75,11 +83,13 @@ class Jim(object):
             initial_guess = self.Prior.sample(key, self.Sampler.n_chains)
         self.Sampler.sample(initial_guess, None)
 
-    def print_summary(self):
+    def print_summary(self, save: bool=True) -> None:
         """
         Generate summary of the run
-
         """
+
+        # Return value will be a long string
+        summary_str = ""        
 
         pretrain_summary = self.Sampler.get_sampler_state("pretraining")
         train_summary = self.Sampler.get_sampler_state("training")
@@ -101,31 +111,39 @@ class Jim(object):
         production_global_acceptance: Array = production_summary["global_accs"]
 
         if self.Sampler.n_loop_pretraining > 0:
-            print("Pretraining summary")
-            print('=' * 10)
+            summary_str += "Pretraining summary\n"
+            summary_str += '=' * 10 + "\n"
             for index in range(len(self.Prior.naming)):
-                print(f"{self.Prior.naming[index]}: {pretraining_chain[:, :, index].mean():.3f} +/- {pretraining_chain[:, :, index].std():.3f}")
-            print(f"Log probability: {pretraining_log_prob.mean():.3f} +/- {pretraining_log_prob.std():.3f}") 
-            print(f"Local acceptance: {pretraining_local_acceptance.mean():.3f} +/- {pretraining_local_acceptance.std():.3f}")
-        
+                summary_str += f"{self.Prior.naming[index]}: {pretraining_chain[:, :, index].mean():.3f} +/- {pretraining_chain[:, :, index].std():.3f}\n"
+            summary_str += f"Log probability: {pretraining_log_prob.mean():.3f} +/- {pretraining_log_prob.std():.3f}\n"
+            summary_str += f"Local acceptance: {pretraining_local_acceptance.mean():.3f} +/- {pretraining_local_acceptance.std():.3f}\n"
+
         if self.Sampler.n_loop_training > 0 and self.Sampler.use_global:
-            print("Training summary")
-            print('=' * 10)
+            summary_str += "Training summary\n"
+            summary_str += '=' * 10 + "\n"
             for index in range(len(self.Prior.naming)):
-                print(f"{self.Prior.naming[index]}: {training_chain[:, :, index].mean():.3f} +/- {training_chain[:, :, index].std():.3f}")
-            print(f"Log probability: {training_log_prob.mean():.3f} +/- {training_log_prob.std():.3f}") 
-            print(f"Local acceptance: {training_local_acceptance.mean():.3f} +/- {training_local_acceptance.std():.3f}")
-            print(f"Global acceptance: {training_global_acceptance.mean():.3f} +/- {training_global_acceptance.std():.3f}")
-            print(f"Max loss: {training_loss.max():.3f}, Min loss: {training_loss.min():.3f}")
+                summary_str += f"{self.Prior.naming[index]}: {training_chain[:, :, index].mean():.3f} +/- {training_chain[:, :, index].std():.3f}\n"
+            summary_str += f"Log probability: {training_log_prob.mean():.3f} +/- {training_log_prob.std():.3f}\n"
+            summary_str += f"Local acceptance: {training_local_acceptance.mean():.3f} +/- {training_local_acceptance.std():.3f}\n"
+            summary_str += f"Global acceptance: {training_global_acceptance.mean():.3f} +/- {training_global_acceptance.std():.3f}\n"
+            summary_str += f"Max loss: {training_loss.max():.3f}, Min loss: {training_loss.min():.3f}\n"
 
         if self.Sampler.n_loop_production > 0:
-            print("Production summary")
-            print('=' * 10)
+            summary_str += "Production summary\n"
+            summary_str += '=' * 10 + "\n"
             for index in range(len(self.Prior.naming)):
-                print(f"{self.Prior.naming[index]}: {production_chain[:, :, index].mean():.3f} +/- {production_chain[:, :, index].std():.3f}")
-            print(f"Log probability: {production_log_prob.mean():.3f} +/- {production_log_prob.std():.3f}")
-            print(f"Local acceptance: {production_local_acceptance.mean():.3f} +/- {production_local_acceptance.std():.3f}")
-            print(f"Global acceptance: {production_global_acceptance.mean():.3f} +/- {production_global_acceptance.std():.3f}")
+                summary_str += f"{self.Prior.naming[index]}: {production_chain[:, :, index].mean():.3f} +/- {production_chain[:, :, index].std():.3f}\n"
+            summary_str += f"Log probability: {production_log_prob.mean():.3f} +/- {production_log_prob.std():.3f}\n"
+            summary_str += f"Local acceptance: {production_local_acceptance.mean():.3f} +/- {production_local_acceptance.std():.3f}\n"
+            summary_str += f"Global acceptance: {production_global_acceptance.mean():.3f} +/- {production_global_acceptance.std():.3f}\n"
+
+        print(summary_str)
+        if save:
+            file_path = self.Sampler.outdir_name + "summary_output.txt"
+            with open(file_path, "w") as file:
+                file.write(summary_str)
+            print(f"Summary has been written to {file_path}")
+            
 
     def get_samples(self, training: bool = False) -> dict:
         """
@@ -144,6 +162,22 @@ class Jim(object):
 
         chains = self.Prior.add_name(chains.transpose(2,0,1), transform_name=True)
         return chains
+    
+    def save_hyperparameters(self):
+        import json
+        
+        hyperparameters_dict = {"flowmc": dict(self.Sampler.hyperparameters),
+                                "jim": dict(self.hyperparameters)}
+        
+        print(hyperparameters_dict)
+        
+        # Note: if we have a mass matrix, that has to be converted to a Numpy array for JSON
+        if "mass_matrix" in hyperparameters_dict["jim"]["local_sampler_arg"]:
+            hyperparameters_dict["jim"]["local_sampler_arg"]["mass_matrix"] = np.asarray(hyperparameters_dict["jim"]["local_sampler_arg"]["mass_matrix"])
+        
+        name = self.Sampler.outdir_name + "hyperparams.json"
+        with open(name, 'w') as yaml_file:
+            json.dump(hyperparameters_dict, yaml_file)
 
     def plot(self):
         pass

@@ -142,3 +142,4 @@ V1.txt
 test_data
 
 *.pickle
+*.npz

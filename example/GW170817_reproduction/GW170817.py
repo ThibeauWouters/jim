@@ -20,6 +20,40 @@ jax.config.update("jax_enable_x64", True)
 import pickle
 from astropy.time import Time
 
+import urllib.request
+import os
+import shutil
+import numpy as np
+import matplotlib.pyplot as plt
+import corner
+
+# TODO move!!!
+default_corner_kwargs = dict(bins=40, 
+                        smooth=1., 
+                        show_titles=False,
+                        label_kwargs=dict(fontsize=16),
+                        title_kwargs=dict(fontsize=16), 
+                        color="blue",
+                        # quantiles=[],
+                        # levels=[0.9],
+                        plot_density=True, 
+                        plot_datapoints=False, 
+                        fill_contours=True,
+                        max_n_ticks=4, 
+                        min_n_ticks=3,
+                        save=False)
+
+params = {
+    "axes.labelsize": 30,
+    "axes.titlesize": 30,
+    "text.usetex": True,
+    "font.family": "serif",
+}
+plt.rcParams.update(params)
+
+labels = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$d_{\rm{L}}/{\rm Mpc}$',
+               r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
+
 ### Data definitions
 
 total_time_start = time.time()
@@ -158,29 +192,42 @@ V1.psd = V1_psd
 
 # TODO double-check whether these are params before or after transformation
 
-
-ref_params = jnp.array([1.19765181e+00, # Mc
-                        2.30871959e-01, # eta (?)
-                        2.89696686e-02, # spin1z
-                        7.57299436e-02, # spin2z 
-                        3.67225424e+01, # distance
-                        4.97355831e-04, # t_c
-                        4.94017055e+00, # phi_c
-                        2.54597984e+00, # iota (?)
-                        8.48429439e-01, # psi
-                        3.40970408e+00, # ra
-                        -3.42097428e-01]) # dec (?)
 prior_range = jnp.array([[1.18,1.21],[0.125,1],[-0.05,0.05],[-0.05,0.05],[1,75],[-0.01,0.02],[0,2*np.pi],[-1,1],[0,np.pi],[0,2*np.pi],[-1,1]])
 n_chains = 1000
-n_dim = len(ref_params)
-guess_param = ref_params
-guess_param = np.array(jnp.repeat(guess_param[None,:],int(n_chains),axis=0) * np.random.normal(loc=1,scale=0.01,size=(int(n_chains), n_dim)))
-guess_param[guess_param[:,1]>0.25,1] = 0.249 # limit eta to avoid singularity
+n_dim = 11
+
+# ref_params = jnp.array([1.19765181e+00, # Mc
+#                         2.30871959e-01, # eta (?)
+#                         2.89696686e-02, # spin1z
+#                         7.57299436e-02, # spin2z 
+#                         3.67225424e+01, # distance
+#                         4.97355831e-04, # t_c
+#                         4.94017055e+00, # phi_c
+#                         2.54597984e+00, # iota (?)
+#                         8.48429439e-01, # psi
+#                         3.40970408e+00, # ra
+#                         -3.42097428e-01]) # dec (?)
+# guess_param = ref_params
+# guess_param = np.array(jnp.repeat(guess_param[None,:],int(n_chains),axis=0) * np.random.normal(loc=1,scale=0.01,size=(int(n_chains), n_dim)))
+# guess_param[guess_param[:,1]>0.25,1] = 0.249 # limit eta to avoid singularity
 
 rng_key_set = initialize_rng_keys(n_chains, seed=42)
 initial_position = jax.random.uniform(rng_key_set[0], shape=(int(n_chains), n_dim)) * 1
 for i in range(n_dim):
     initial_position = initial_position.at[:,i].set(initial_position[:,i]*(prior_range[i,1]-prior_range[i,0])+prior_range[i,0])
+    
+ref_params = {'M_c': 1.18486011, 
+              'eta': 0.20949408, 
+              's1_z': 0.04999993, 
+              's2_z': 0.00187443,  
+              'd_L': 34.51899719, 
+              't_c': -0.03660164,  
+              'phase_c': 3.85715701, 
+              'iota': 1.62010796, 
+              'psi': 2.26897739, 
+              'ra': 1.49513673,
+              'dec': 0.74324978
+}
 
 # m1,m2 = jax.vmap(Mc_eta_to_ms)(guess_param[:,:2])
 # q = m2/m1
@@ -216,7 +263,6 @@ prior = Uniform(
 
 ### Create likelihood object
 
-# likelihood = TransientLikelihoodFD([H1, L1], waveform=RippleIMRPhenomD(), trigger_time=gps, duration=T, post_trigger_duration=T/2)
 likelihood = HeterodynedTransientLikelihoodFD([H1, L1, V1], prior=prior, bounds=[prior.xmin, prior.xmax], waveform=RippleIMRPhenomD(), trigger_time=gps, duration=T, post_trigger_duration=T/2, n_bins=500, ref_params=ref_params)
 
 ### Create sampler and jim objects
@@ -258,35 +304,67 @@ jim = Jim(
 )
 
 ### Heavy computation begins
-jim.sample(jax.random.PRNGKey(24), initial_guess=initial_position) # start from our initial guess
+# TODO check whether initial position might be the cause of breaking things?
+jim.sample(jax.random.PRNGKey(42), initial_guess=initial_position) # start from our initial guess
 ### Heavy computation ends
 
-### Postprocessing 
+# Cleaning outdir
+for filename in os.listdir(outdir_name):
+    file_path = os.path.join(outdir_name, filename)
+    try:
+        if os.path.isfile(file_path) or os.path.islink(file_path):
+            os.unlink(file_path)
+        elif os.path.isdir(file_path):
+            shutil.rmtree(file_path)
+    except Exception as e:
+        print('Failed to delete %s. Reason: %s' % (file_path, e))
 
-# Check the PE results
+# === Show results, save output ===
+
+### Summary
 jim.print_summary()
 
-# Create plots
+### Diagnosis plots of summaries
 print("Creating plots")
 jim.Sampler.plot_summary("pretraining")
 jim.Sampler.plot_summary("training")
 jim.Sampler.plot_summary("production")
 
-# Save output to files
-samples_training = jim.get_samples("training")
-samples_production = jim.get_samples("production")
-samples_list = [samples_training, samples_production]
-names = [outdir_name + 'samples_training_GW170817_IMRPhenomD.pickle', 
-         outdir_name + 'samples_production_GW170817_IMRPhenomD.pickle']
+# TODO - save the NF object to sample from later on
+# print("Saving jim object (Normalizing flow)")
+# jim.Sampler.save_flow("my_nf_IMRPhenomD")
 
-for sample, name in zip(samples_list, names):
-    print(f"Saving samples to {name}")
-    with open(name, 'wb') as handle:
-        pickle.dump(sample, handle, protocol=pickle.HIGHEST_PROTOCOL)
+### Write to 
+which_list = ["training", "production"]
+for which in which_list:
+    name = outdir_name + f'results_{which}.npz'
+    print(f"Saving {which} samples in npz format to {name}")
+    state = jim.Sampler.get_sampler_state(which)
+    chains, log_prob, local_accs, global_accs = state["chains"], state["log_prob"], state["local_accs"], state["global_accs"]
+    np.savez(name, chains=chains, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs)
 
-print("Testing sampling from the flow")
-flow_samples = jim.Sampler.sample_flow(10000)
-name = outdir_name + 'flow_samples_GW170817_IMRPhenomD.pickle'
+print("Sampling from the flow")
+chains = jim.Sampler.sample_flow(10000)
+name = outdir_name + 'results_NF.npz'
 print(f"Saving flow samples to {name}")
-with open(name, 'wb') as handle:
-    pickle.dump(flow_samples, handle, protocol=pickle.HIGHEST_PROTOCOL)
+np.savez(name, chains=chains)
+
+### Plot chains and samples
+
+files = [outdir_name + s for s in ["results_production.npz", "results_NF.npz"]]
+names = [outdir_name + s for s in ["production.png", "NF.png"]]
+
+for file, name in zip(files, names):
+    data = np.load(file)
+    # TODO improve the following: ignore t_c, and reshape with n_dims, and do conversions
+    chains = data['chains'][:,:,[0,1,2,3,4,6,7,8,9,10]].reshape(-1,10)
+    chains[:,6] = np.arccos(chains[:,6])
+    chains[:,9] = np.arcsin(chains[:,9])
+    chains = np.asarray(chains)
+    corner_kwargs = default_corner_kwargs
+    fig = corner.corner(chains, labels = labels, hist_kwargs={'density': True}, **default_corner_kwargs)
+    fig.savefig(name, bbox_inches='tight')  
+    
+    
+print("Saving the hyperparameters")
+jim.save_hyperparameters()

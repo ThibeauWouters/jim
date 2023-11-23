@@ -133,6 +133,8 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
     B0_array: dict[Array]  # B0 array for the likelihood, keyed by detector name
     B1_array: dict[Array]  # B1 array for the likelihood, keyed by detector name
 
+    # TODO get n_bins, n_walkers and n_loops as hyperparams?
+
     def __init__(
         self,
         detectors: list[Detector],
@@ -144,7 +146,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         duration: float = 4,
         post_trigger_duration: float = 2,
         n_walkers: int = 100,
-        n_loops: int = 200,
+        n_loops: int = 2000,
         ref_params: Array = None
     ) -> None:
         super().__init__(
@@ -163,12 +165,13 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
             ref_params = self.maximize_likelihood(
                 bounds=bounds, prior=prior, set_nwalkers=n_walkers, n_loops=n_loops
             )
-        else:
-            # TODO change so that users have to give the dictionary rather than the array itself to avoid having to do the tranformations here.
-            # Convert the given ref params, which are given as array, to a dictionary
-            ref_params = prior.add_name(ref_params, transform_name=True, transform_value=False)
-            print("Ref params are now:")
-            print(ref_params)
+        # else:
+        #     # TODO change so that users have to give the dictionary rather than the array itself to avoid having to do the tranformations here.
+        #     # Convert the given ref params, which are given as array, to a dictionary
+        #     ref_params = prior.add_name(ref_params, transform_name=True, transform_value=False)
+        
+        print("Ref params (heterodyned likelihood) are now:")
+        print(ref_params)
         self.ref_params = ref_params
 
         self.ref_params["gmst"] = self.gmst
