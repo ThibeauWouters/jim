@@ -4,9 +4,12 @@ import jax.numpy as jnp
 
 from flowMC.sampler.Sampler import Sampler
 from flowMC.sampler.MALA import MALA
-from flowMC.nfmodel.rqSpline import MaskedCouplingRQSpline
+from flowMC.nfmodel.rqSpline import MaskedCouplingRQSpline, RQSpline
+from flowMC.nfmodel.mlp import MLP
 from flowMC.utils.EvolutionaryOptimizer import EvolutionaryOptimizer
 from flowMC.utils.PRNG_keys import initialize_rng_keys
+
+
 
 from jimgw.prior import Prior
 from jimgw.likelihood import LikelihoodBase
@@ -37,8 +40,20 @@ class Jim(object):
             
         self.rng_key_set = initialize_rng_keys(self.hyperparameters["n_chains"], seed=self.hyperparameters["seed"])
         local_sampler = MALA(self.posterior, True, self.local_sampler_arg)
-
+        
+        ### New attempt
+        key = jax.random.PRNGKey(123456789)
+        key, conditioner_key= jax.random.split(key)
+        n_features = self.Prior.n_dim
+        hidden_size = self.hidden_size
+        num_bins = self.num_bins
+        conditioner = MLP([n_features]+hidden_size+ [n_features*(num_bins*3+1)], conditioner_key, scale=1e-2, activation=jax.nn.tanh)
+        model = RQSpline(conditioner, -10.0, 10.0)
+        
+        ### Old code
+        # TODO swap here
         model = MaskedCouplingRQSpline(self.Prior.n_dim, self.num_layers, self.hidden_size, self.num_bins, self.rng_key_set[-1])
+        
         self.Sampler = Sampler(
             self.Prior.n_dim,
             self.rng_key_set,
@@ -166,18 +181,18 @@ class Jim(object):
     def save_hyperparameters(self):
         import json
         
-        hyperparameters_dict = {"flowmc": dict(self.Sampler.hyperparameters),
-                                "jim": dict(self.hyperparameters)}
+        # TODO automatically change any ArrayImpl to np array?
+        if "step_size" in self.hyperparameters["local_sampler_arg"].keys():
+            self.hyperparameters["local_sampler_arg"]["step_size"] = np.asarray(self.hyperparameters["local_sampler_arg"]["step_size"])
+        
+        hyperparameters_dict = {"flowmc": self.Sampler.hyperparameters,
+                                "jim": self.hyperparameters}
         
         print(hyperparameters_dict)
         
-        # Note: if we have a mass matrix, that has to be converted to a Numpy array for JSON
-        if "mass_matrix" in hyperparameters_dict["jim"]["local_sampler_arg"]:
-            hyperparameters_dict["jim"]["local_sampler_arg"]["mass_matrix"] = np.asarray(hyperparameters_dict["jim"]["local_sampler_arg"]["mass_matrix"])
-        
         name = self.Sampler.outdir_name + "hyperparams.json"
-        with open(name, 'w') as yaml_file:
-            json.dump(hyperparameters_dict, yaml_file)
+        with open(name, 'w') as file:
+            json.dump(hyperparameters_dict, file)
 
     def plot(self):
         pass

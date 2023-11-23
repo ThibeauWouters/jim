@@ -20,21 +20,55 @@ jax.config.update("jax_enable_x64", True)
 import pickle
 from astropy.time import Time
 
+# import urllib.request
+import os
+import shutil
+import numpy as np
+import matplotlib.pyplot as plt
+import corner
+
+# TODO move!!!
+default_corner_kwargs = dict(bins=40, 
+                        smooth=1., 
+                        show_titles=False,
+                        label_kwargs=dict(fontsize=16),
+                        title_kwargs=dict(fontsize=16), 
+                        color="blue",
+                        # quantiles=[],
+                        # levels=[0.9],
+                        plot_density=True, 
+                        plot_datapoints=False, 
+                        fill_contours=True,
+                        max_n_ticks=4, 
+                        min_n_ticks=3,
+                        save=False)
+
+params = {
+    "axes.labelsize": 30,
+    "axes.titlesize": 30,
+    "text.usetex": True,
+    "font.family": "serif",
+}
+plt.rcParams.update(params)
+
+labels = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$d_{\rm{L}}/{\rm Mpc}$',
+               r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
+
 ### Data definitions
 
 total_time_start = time.time()
 gps = 1187008882.43
-trigger_time = 1187008882.43
-fmin = 23
-fmax = 1792
+trigger_time = gps
+fmin = 20
+fmax = 2048
 minimum_frequency = fmin
 maximum_frequency = fmax
 T = 128
 duration = T
 post_trigger_duration = 2
 epoch = duration - post_trigger_duration
-gmst = GreenwichMeanSiderealTime(trigger_time)
-f_ref = 20 
+f_ref = fmin 
+# gmst = GreenwichMeanSiderealTime(trigger_time)
 # gsmt = Time(trigger_time, format="gps").sidereal_time("apparent", "greenwich").rad
 
 ### Getting detector data
@@ -82,117 +116,17 @@ V1.frequencies = V1_frequency
 V1.data = V1_data
 V1.psd = V1_psd 
 
-### Copy pasted form TurboPE script, but outdated code:
-# def genWaveform(theta):
-#     # Get the relevant parameters
-#     theta_waveform = theta[:8]
-#     # We set t_c to zero
-#     theta_waveform = theta_waveform.at[5].set(0)
-#     # Get extrinsic parameters
-#     ra = theta[9]
-#     dec = theta[10]
-#     hp_test, hc_test = gen_IMRPhenomD_hphc(H1_frequency, theta_waveform, f_ref)
-#     h_dict = {"p": hp_test, "c": hc_test}
-#     params = {"ra": ra, "dec": dec, "gmst": gmst, "psi": 0}
-#     # TODO gmst
-#     # align_time = jnp.exp(-1j*2*jnp.pi*H1_frequency*(epoch+theta[5]))
-#     h_test_H1 = H1.fd_response(H1_frequency, hp_test, hc_test, params) # * align_time
-#     return h_test_H1
-
-# def calculate_match_filter_SNR(theta):
-#     # Separate waveformm parameters and set t_c to zero
-#     theta_waveform = theta[:8]
-#     theta_waveform = theta_waveform.at[5].set(0)
-#     ra = theta[9]
-#     dec = theta[10]
-#     # Generate the sky waveform
-#     hp_test, hc_test = gen_IMRPhenomD_hphc(H1_frequency, theta_waveform, f_ref)
-#     h_dict = {"p": hp_test, "c": hc_test}
-#     params = {"ra": ra, "dec": dec, "gmst": gmst, "psi": theta[8]}
-#     # align_time = jnp.exp(-1j*2*jnp.pi*H1_frequency*(epoch+theta[5])) # TODO unused here?
-#     h_test_H1 = H1.fd_response(H1_frequency, h_dict, params)# * align_time
-#     h_test_L1 = L1.fd_response(L1_frequency, h_dict, params)# * align_time
-#     h_test_V1 = V1.fd_response(V1_frequency, h_dict, params)# * align_time
-#     # Get the inner product to compute SNR
-#     df = H1_frequency[1] - H1_frequency[0]
-#     match_filter_SNR_H1 = 4*jnp.sum((jnp.conj(H1_data)*h_test_H1)/H1_psd*df).real
-#     match_filter_SNR_L1 = 4*jnp.sum((jnp.conj(L1_data)*h_test_L1)/L1_psd*df).real
-#     match_filter_SNR_V1 = 4*jnp.sum((jnp.conj(V1_data)*h_test_V1)/V1_psd*df).real
-#     optimal_SNR_H1 = 4*jnp.sum((jnp.conj(h_test_H1)*h_test_H1)/H1_psd*df).real
-#     optimal_SNR_L1 = 4*jnp.sum((jnp.conj(h_test_L1)*h_test_L1)/L1_psd*df).real
-#     optimal_SNR_V1 = 4*jnp.sum((jnp.conj(h_test_V1)*h_test_V1)/V1_psd*df).real
-#     return match_filter_SNR_H1, match_filter_SNR_L1, match_filter_SNR_V1, optimal_SNR_H1, optimal_SNR_L1, optimal_SNR_V1
-
-
-# def LogLikelihood(theta):
-#     # TODO mostly duplicate from above?
-#     # Do conversions (q to eta, cos iota to iota, cos dec to dec)
-#     theta = theta.at[1].set(theta[1]/(1+theta[1])**2)
-#     theta = theta.at[7].set(jnp.arccos(theta[7]))
-#     theta = theta.at[10].set(jnp.arcsin(theta[10]))
-#     # Separate waveform
-#     theta_waveform = theta[:8]
-#     theta_waveform = theta_waveform.at[5].set(0)
-#     ra = theta[9]
-#     dec = theta[10]
-#     # Generate the sky waveform
-#     hp_test, hc_test = gen_IMRPhenomD_hphc(H1_frequency, theta_waveform, f_ref)
-#     h_dict = {"p": hp_test, "c": hc_test}
-#     params = {"ra": ra, "dec": dec, "gmst": gmst, "psi": theta[8]}
-#     # align_time = jnp.exp(-1j*2*jnp.pi*H1_frequency*(epoch+theta[5])) # TODO unused here?
-#     h_test_H1 = H1.fd_response(H1_frequency, h_dict, params)# * align_time
-#     h_test_L1 = L1.fd_response(L1_frequency, h_dict, params)# * align_time
-#     h_test_V1 = V1.fd_response(V1_frequency, h_dict, params)# * align_time
-#     # Get the inner product to compute SNR
-#     df = H1_frequency[1] - H1_frequency[0]
-#     match_filter_SNR_H1 = 4*jnp.sum((jnp.conj(H1_data)*h_test_H1)/H1_psd*df).real
-#     match_filter_SNR_L1 = 4*jnp.sum((jnp.conj(L1_data)*h_test_L1)/L1_psd*df).real
-#     match_filter_SNR_V1 = 4*jnp.sum((jnp.conj(V1_data)*h_test_V1)/V1_psd*df).real
-#     optimal_SNR_H1 = 4*jnp.sum((jnp.conj(h_test_H1)*h_test_H1)/H1_psd*df).real
-#     optimal_SNR_L1 = 4*jnp.sum((jnp.conj(h_test_L1)*h_test_L1)/L1_psd*df).real
-#     optimal_SNR_V1 = 4*jnp.sum((jnp.conj(h_test_V1)*h_test_V1)/V1_psd*df).real
-
-#     return (match_filter_SNR_H1-optimal_SNR_H1/2) + (match_filter_SNR_L1-optimal_SNR_L1/2) + (match_filter_SNR_V1-optimal_SNR_V1/2)
-
-### Setting up the initial positions
 
 # TODO double-check whether these are params before or after transformation
 
 prior_range = jnp.array([[1.18,1.21],[0.125,1],[-0.05,0.05],[-0.05,0.05],[1,75],[-0.01,0.02],[0,2*np.pi],[-1,1],[0,np.pi],[0,2*np.pi],[-1,1]])
 n_chains = 1000
 n_dim = 11
-
-
-# ref_params = jnp.array([1.19765181e+00, # Mc
-#                         2.30871959e-01, # eta (?)
-#                         2.89696686e-02, # spin1z
-#                         7.57299436e-02, # spin2z 
-#                         3.67225424e+01, # distance
-#                         4.97355831e-04, # t_c
-#                         4.94017055e+00, # phi_c
-#                         2.54597984e+00, # iota (?)
-#                         8.48429439e-01, # psi
-#                         3.40970408e+00, # ra
-#                         -3.42097428e-01]) # dec (?)
-# guess_param = ref_params
-# guess_param = np.array(jnp.repeat(guess_param[None,:],int(n_chains),axis=0) * np.random.normal(loc=1,scale=0.01,size=(int(n_chains), n_dim)))
-# guess_param[guess_param[:,1]>0.25,1] = 0.249 # limit eta to avoid singularity
-
 rng_key_set = initialize_rng_keys(n_chains, seed=42)
 initial_position = jax.random.uniform(rng_key_set[0], shape=(int(n_chains), n_dim)) * 1
 for i in range(n_dim):
     initial_position = initial_position.at[:,i].set(initial_position[:,i]*(prior_range[i,1]-prior_range[i,0])+prior_range[i,0])
-
-# m1,m2 = jax.vmap(Mc_eta_to_ms)(guess_param[:,:2])
-# q = m2/m1
-
-### TODO do we have to implement this?
-# from astropy.cosmology import Planck18 as cosmo
-
-# z = np.linspace(0.0002,0.03,10000)
-# dL = cosmo.luminosity_distance(z).value
-# dVdz = cosmo.differential_comoving_volume(z).value
-
+    
 # Prior
 prior = Uniform(
     xmin=[1.18, 0.125, -0.05, -0.05,  1.0, -0.1,        0.0, -1.0,    0.0,        0.0, -1],
@@ -212,27 +146,24 @@ prior = Uniform(
     ],
     transforms = {"q": ("eta", lambda params: params['q']/(1+params['q'])**2),
                  "cos_iota": ("iota",lambda params: jnp.arccos(jnp.arcsin(jnp.sin(params['cos_iota']/2*jnp.pi))*2/jnp.pi)),
-                 "sin_dec": ("dec",lambda params: jnp.arcsin(jnp.arcsin(jnp.sin(params['sin_dec']/2*jnp.pi))*2/jnp.pi))} # sin and arcsin are periodize cos_iota and sin_dec
+                 "sin_dec": ("dec",lambda params: jnp.arcsin(jnp.arcsin(jnp.sin(params['sin_dec']/2*jnp.pi))*2/jnp.pi))}
 )
 
 ### Create likelihood object
 
-# These ref params are obtained with 2000 loops in maximize_likelihood
-ref_params = {'M_c': 1.18486011, 
-              'eta': 0.20949408, 
-              's1_z': 0.04999993, 
-              's2_z': 0.00187443, 
-              'd_L': 34.51899719, 
-              't_c': -0.03660164,
-              'phase_c': 3.85715701, 
-              'iota': 1.62010796, 
-              'psi': 2.26897739, 
-              'ra': 1.49513673, 
-              'dec': 0.74324978
-}
+ref_params = {'M_c': 1.19757891, 
+              'eta': 0.23462523, 
+              's1_z': 0.04999954, 
+              's2_z': 0.00300504,  
+              'd_L': 24.611064, 
+              't_c': -0.00119876, 
+              'phase_c': 6.14522284, 
+              'iota': 1.32743825, 
+              'psi': 2.33057612,
+              'ra': 3.9419984, 
+              'dec': -1.17831877}
 
-# likelihood = TransientLikelihoodFD([H1, L1], waveform=RippleIMRPhenomD(), trigger_time=gps, duration=T, post_trigger_duration=T/2)
-likelihood = HeterodynedTransientLikelihoodFD([H1, L1, V1], prior=prior, bounds=[prior.xmin, prior.xmax], waveform=RippleIMRPhenomD(), trigger_time=gps, duration=T, post_trigger_duration=T/2, ref_params=ref_params)
+likelihood = HeterodynedTransientLikelihoodFD([H1, L1, V1], prior=prior, bounds=[prior.xmin, prior.xmax], waveform=RippleIMRPhenomD(), trigger_time=gps, duration=T, n_bins=500, ref_params=ref_params)
 
 ### Create sampler and jim objects
 
@@ -253,55 +184,104 @@ outdir_name = "./outdir_localonly/"
 jim = Jim(
     likelihood,
     prior,
-    n_loop_pretraining=0,
+    n_loop_pretraining=300,
     n_loop_training=0,
-    n_loop_production=300,
+    n_loop_production=20,
     n_local_steps=200,
     n_global_steps=200,
     n_chains=n_chains,
-    n_epochs=60,
+    n_epochs=50,
     learning_rate=0.001,
     max_samples=50000,
     momentum=0.9,
     batch_size=50000,
     use_global=False,
     keep_quantile=0.0,
-    train_thinning=40,
-    output_thinning=1,
+    train_thinning=1,
+    output_thinning=10,
+    n_loops_maximize_likelihood = 2000,
     local_sampler_arg=local_sampler_arg,
     outdir_name=outdir_name
 )
 
 ### Heavy computation begins
-# TODO check whether initial position might be the cause of breaking things?
-jim.sample(jax.random.PRNGKey(42), initial_guess=initial_position) # start from our initial guess
+jim.sample(jax.random.PRNGKey(42))
 ### Heavy computation ends
 
-### Postprocessing 
+# === Show results, save output ===
 
-# Check the PE results
+# Cleaning outdir
+for filename in os.listdir(outdir_name):
+    file_path = os.path.join(outdir_name, filename)
+    try:
+        if os.path.isfile(file_path) or os.path.islink(file_path):
+            os.unlink(file_path)
+        elif os.path.isdir(file_path):
+            shutil.rmtree(file_path)
+    except Exception as e:
+        print('Failed to delete %s. Reason: %s' % (file_path, e))
+
+### Summary
 jim.print_summary()
 
-# Create plots
+### Diagnosis plots of summaries
 print("Creating plots")
-# jim.Sampler.plot_summary("pretraining")
-# jim.Sampler.plot_summary("training")
+jim.Sampler.plot_summary("pretraining")
+jim.Sampler.plot_summary("training")
 jim.Sampler.plot_summary("production")
 
-# Save output to files
-# samples_training = jim.get_samples("training")
-samples_production = jim.get_samples("production")
-samples_list = [samples_production] # samples_training, 
-names = [outdir_name + 'samples_production_GW170817_IMRPhenomD.pickle'] # outdir_name + 'samples_training_GW170817_IMRPhenomD.pickle', 
+# TODO - save the NF object to sample from later on
+# print("Saving jim object (Normalizing flow)")
+# jim.Sampler.save_flow("my_nf_IMRPhenomD")
 
-for sample, name in zip(samples_list, names):
-    print(f"Saving samples to {name}")
-    with open(name, 'wb') as handle:
-        pickle.dump(sample, handle, protocol=pickle.HIGHEST_PROTOCOL)
+### Write to 
+which_list = ["training", "production"]
+for which in which_list:
+    name = outdir_name + f'results_{which}.npz'
+    print(f"Saving {which} samples in npz format to {name}")
+    state = jim.Sampler.get_sampler_state(which)
+    chains, log_prob, local_accs, global_accs = state["chains"], state["log_prob"], state["local_accs"], state["global_accs"]
+    np.savez(name, chains=chains, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs)
 
-print("Testing sampling from the flow")
-flow_samples = jim.Sampler.sample_flow(10000)
-name = outdir_name + 'flow_samples_GW170817_IMRPhenomD.pickle'
+print("Sampling from the flow")
+chains = jim.Sampler.sample_flow(10000)
+name = outdir_name + 'results_NF.npz'
 print(f"Saving flow samples to {name}")
-with open(name, 'wb') as handle:
-    pickle.dump(flow_samples, handle, protocol=pickle.HIGHEST_PROTOCOL)
+np.savez(name, chains=chains)
+
+### Plot chains and samples
+
+# Production samples:
+file = outdir_name + "results_production.npz"
+name = outdir_name + "results_production.png"
+
+data = np.load(file)
+# TODO improve the following: ignore t_c, and reshape with n_dims, and do conversions
+chains = data['chains'][:,:,[0,1,2,3,4,6,7,8,9,10]].reshape(-1,10)
+chains[:,6] = np.arccos(chains[:,6])
+chains[:,9] = np.arcsin(chains[:,9])
+chains = np.asarray(chains)
+corner_kwargs = default_corner_kwargs
+fig = corner.corner(chains, labels = labels, hist_kwargs={'density': True}, **default_corner_kwargs)
+fig.savefig(name, bbox_inches='tight')  
+
+# Production samples:
+file = outdir_name + "results_NF.npz"
+name = outdir_name + "results_NF.png"
+
+data = np.load(file)["chains"]
+print("np.shape(data)")
+print(np.shape(data))
+
+# TODO improve the following: ignore t_c, and reshape with n_dims, and do conversions
+chains = data[:, [0,1,2,3,4,6,7,8,9,10]]
+# chains[:,6] = np.arccos(chains[:,6])
+# chains[:,9] = np.arcsin(chains[:,9]) # TODO not sure if this is still necessary?
+chains = np.asarray(chains)
+corner_kwargs = default_corner_kwargs
+fig = corner.corner(chains, labels = labels, hist_kwargs={'density': True}, **default_corner_kwargs)
+fig.savefig(name, bbox_inches='tight')  
+    
+    
+print("Saving the hyperparameters")
+jim.save_hyperparameters()

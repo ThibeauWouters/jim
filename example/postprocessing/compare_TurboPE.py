@@ -1,3 +1,5 @@
+### Small utility script to compare results with TurboPE
+
 import seaborn as sns
 import pickle
 import jax.numpy as jnp
@@ -63,44 +65,40 @@ def get_chains(event, data_path = "../../data/"):
         flowMC_chains[:,9] = np.arcsin(flowMC_chains[:,9])
     return flowMC_chains, bilby_chains
 
-### Fetch and check data (choose training or production run)
+### Fetch data
 
-which = "production" 
-filename = f"../GW170817_reproduction/outdir/samples_{which}_GW170817_IMRPhenomD.pickle"
-print("Loading samples...")
-with open(filename, 'rb') as handle:
-    loaded_samples = pickle.load(handle) 
-print("Loading complete")
-    
-keys = list(loaded_samples.keys())
-# We will ignore t_c in the plots
-n_dim = len(keys) - 1 
-
-samples = []
-for key in keys:
-    if key == "t_c":
-        continue
-    else:
-        myarray = loaded_samples[key].flatten()
-        samples.append(myarray)
-
-# To avoid complaints from corner:
-if np.shape(samples)[0] < np.shape(samples)[1]:
-    samples = np.swapaxes(samples, 0, 1)
-samples = np.asarray(samples)
-print(np.shape(samples))
-
-### Get chains from TurboPE
-
-flowMC_chains, bilby_chains = get_chains('GW170817')
-
-### Plotting chains
-
-name = f"my_samples_{which}.png"
-print(f"Saving plot of chains to {name}")
+which_list = ["production", "NF"]
+outdir = "../GW170817_reproduction/outdir/"
 corner_kwargs = default_corner_kwargs
-fig = corner.corner(samples, labels = labels, hist_kwargs={'density': True}, **default_corner_kwargs)
-corner_kwargs["color"] = "red"
-corner.corner(flowMC_chains, labels = labels, fig=fig, hist_kwargs={'density': True}, **corner_kwargs)
-fig.savefig(name, bbox_inches='tight')  
-print("Done")
+
+for which in which_list:
+    corner_kwargs["color"] = "blue"
+    filename = f"{outdir}results_{which}.npz"
+
+    print(f"Loading {which} samples...")
+    # My samples
+    if which == "production":
+        data = np.load(filename)
+        chains = data['chains'][:,:,[0,1,2,3,4,6,7,8,9,10]].reshape(-1,10)
+        chains[:,6] = np.arccos(chains[:,6])
+        chains[:,9] = np.arcsin(chains[:,9])
+        chains = np.asarray(chains)
+        print(np.shape(chains))
+    else:
+        data = np.load(filename)
+        chains = data["chains"][:, [0,1,2,3,4,6,7,8,9,10]]
+        chains = np.asarray(chains)
+        print(np.shape(chains))
+    # TurboPE samples
+    flowMC_chains, _ = get_chains('GW170817')
+    print("Loading complete")
+
+    ### Plot
+    name = f"comparison_TurboPE_{which}.png"
+    print(f"Saving plot of chains to {name}")
+    
+    fig = corner.corner(chains, labels = labels, hist_kwargs={'density': True}, **default_corner_kwargs)
+    corner_kwargs["color"] = "red"
+    corner.corner(flowMC_chains, labels = labels, fig=fig, hist_kwargs={'density': True}, **corner_kwargs)
+    fig.savefig(outdir + name, bbox_inches='tight')  
+    print("Done")
