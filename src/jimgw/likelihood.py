@@ -153,11 +153,9 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
             detectors, waveform, trigger_time, duration, post_trigger_duration
         )
 
-        # Get the original frequency grid
         frequency_original = self.detectors[0].frequencies
-        # Get the grid of the relative binning scheme (contains the final endpoint) and the center points
         freq_grid, self.freq_grid_center = self.make_binning_scheme(
-            np.array(frequency_original), n_bins
+            np.array(frequency_original), n_bins + 1
         )
         self.freq_grid_low = freq_grid[:-1]
 
@@ -187,7 +185,6 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         h_sky_low = self.waveform(self.freq_grid_low, self.ref_params)
         h_sky_center = self.waveform(self.freq_grid_center, self.ref_params)
 
-        # Get frequency masks to be applied, for both original and heterodyne frequency grid
         f_valid = frequency_original[jnp.where((jnp.abs(h_sky['p'])+jnp.abs(h_sky['c']))>0)[0]]
         f_max = jnp.max(f_valid)
         f_min = jnp.min(f_valid)
@@ -228,7 +225,6 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         self.freq_grid_center = self.freq_grid_center[mask_heterodyne_center]
 
         # Get phase shifts to align time of coalescence
-
         align_time = jnp.exp(
             -1j
             * 2
@@ -305,6 +301,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
                 detector.fd_response(frequencies_center, waveform_sky_center, params)
                 * align_time_center
             )
+            
             r0 = waveform_center / self.waveform_center_ref[detector.name]
             r1 = (waveform_low / self.waveform_low_ref[detector.name] - r0) / (
                 frequencies_low - frequencies_center

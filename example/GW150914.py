@@ -21,7 +21,7 @@ total_time_start = time.time()
 # first, fetch a 4s segment centered on GW150914
 gps = 1126259462.4
 start = gps - 2
-end = gps + 2
+end   = gps + 2
 fmin = 20.0
 fmax = 1024.0
 
@@ -90,13 +90,3 @@ print("Creating diagnosis")
 jim.Sampler.plot_summary("pretraining")
 jim.Sampler.plot_summary("training")
 jim.Sampler.plot_summary("production")
-
-print("Pretraining gelman-rubin")
-result = gelman_rubin(jim.Sampler.get_sampler_state("pretraining")["chains"])
-print(result)
-print("Training gelman-rubin")
-result = gelman_rubin(jim.Sampler.get_sampler_state("training")["chains"])
-print(result)
-print("Production gelman-rubin")
-result = gelman_rubin(jim.Sampler.get_sampler_state("production")["chains"])
-print(result)
