@@ -184,9 +184,9 @@ outdir_name = "./outdir_localonly/"
 jim = Jim(
     likelihood,
     prior,
-    n_loop_pretraining=300,
+    n_loop_pretraining=0,
     n_loop_training=0,
-    n_loop_production=20,
+    n_loop_production=300,
     n_local_steps=200,
     n_global_steps=200,
     n_chains=n_chains,

@@ -257,7 +257,8 @@ name = outdir_name + "results_production.png"
 
 data = np.load(file)
 # TODO improve the following: ignore t_c, and reshape with n_dims, and do conversions
-chains = data['chains'][:,:,[0,1,2,3,4,6,7,8,9,10]].reshape(-1,10)
+idx_list = [0,1,2,3,4,6,7,8,9,10]
+chains = data['chains'][:,:,idx_list].reshape(-1,10)
 chains[:,6] = np.arccos(chains[:,6])
 chains[:,9] = np.arcsin(chains[:,9])
 chains = np.asarray(chains)
@@ -274,7 +275,7 @@ print("np.shape(data)")
 print(np.shape(data))
 
 # TODO improve the following: ignore t_c, and reshape with n_dims, and do conversions
-chains = data[:, [0,1,2,3,4,6,7,8,9,10]]
+chains = data[:, idx_list]
 # chains[:,6] = np.arccos(chains[:,6])
 # chains[:,9] = np.arcsin(chains[:,9]) # TODO not sure if this is still necessary?
 chains = np.asarray(chains)

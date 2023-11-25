@@ -184,9 +184,9 @@ outdir_name = "./outdir/"
 jim = Jim(
     likelihood,
     prior,
-    n_loop_pretraining=100,
+    n_loop_pretraining=0,
     n_loop_training=200,
-    n_loop_production=20,
+    n_loop_production=200,
     n_local_steps=200,
     n_global_steps=200,
     n_chains=n_chains,
@@ -197,13 +197,12 @@ jim = Jim(
     batch_size=50000,
     use_global=True,
     keep_quantile=0.0,
-    train_thinning=1,
-    output_thinning=30,    
-    num_layers = 6,
-    hidden_size = [32,32],
+    train_thinning=10,
+    output_thinning=10,
     n_loops_maximize_likelihood = 2000,
     local_sampler_arg=local_sampler_arg,
-    outdir_name=outdir_name
+    outdir_name=outdir_name,
+    save_global_samples_training=False
 )
 
 ### Heavy computation begins

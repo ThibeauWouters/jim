@@ -22,8 +22,8 @@ class Jim(object):
     Master class for interfacing with flowMC
     """
 
-    # TODO make hyperparameters more grouped together
-    def __init__(self, likelihood: LikelihoodBase, prior: Prior, **kwargs):
+    # TODO if wanted, make new kwarg a new hyperparameter
+    def __init__(self, likelihood: LikelihoodBase, prior: Prior, save_global_samples_training: bool = True,  **kwargs):
         self.Likelihood = likelihood
         self.Prior = prior
         
@@ -61,6 +61,9 @@ class Jim(object):
             local_sampler,
             model,
             **kwargs)
+        
+        # TODO move this if OK
+        self.Sampler.save_global_samples_training = save_global_samples_training
         
         
 

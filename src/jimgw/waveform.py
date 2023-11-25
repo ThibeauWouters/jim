@@ -15,9 +15,6 @@ class Waveform(ABC):
     def __call__(self, frequency: Array, params: dict) -> Array:
         return NotImplemented
     
-    # TODO necessary?
-    def gen_complex_strain(self, frequency: Array, params: dict) -> Array:
-        return NotImplemented
 
 class RippleIMRPhenomD(Waveform):
 
@@ -50,23 +47,6 @@ class RippleIMRPhenomD(Waveform):
         
         return gen_IMRPhenomD(frequency, theta, self.f_ref)
     
-    # # TODO necessary?
-    # def gen_complex_strain(self, frequency: Array, params: dict) -> Array:
-    #     ra = params["ra"]
-    #     dec = params["dec"]
-    #     theta = [
-    #         params["M_c"],
-    #         params["eta"],
-    #         params["s1_z"],
-    #         params["s2_z"],
-    #         params["d_L"],
-    #         0,
-    #         params["phase_c"],
-    #         params["iota"],
-    #     ]
-    #     return gen_IMRPhenomD(frequency, theta, self.f_ref)
-
-
 class RippleIMRPhenomPv2(Waveform):
 
     f_ref: float
@@ -111,8 +91,36 @@ class RippleTaylorF2(Waveform):
             params["eta"],
             params["s1_z"],
             params["s2_z"],
-            params["lambda1"],
-            params["lambda2"],
+            params["lambda_tilde"],
+            params["delta_lambda_tilde"],
+            params["d_L"],
+            0,
+            params["phase_c"],
+            params["iota"],
+        ]
+        hp, hc = gen_TaylorF2_hphc(frequency, theta, self.f_ref)
+        output["p"] = hp
+        output["c"] = hc
+        return output
+    
+class RippleTaylorF2NoTidal(Waveform):
+
+    f_ref: float
+
+    def __init__(self, f_ref: float = 20.0):
+        self.f_ref = f_ref
+
+    def __call__(self, frequency: Array, params: dict) -> dict:
+        output = {}
+        ra = params["ra"]
+        dec = params["dec"]
+        theta = [
+            params["M_c"],
+            params["eta"],
+            params["s1_z"],
+            params["s2_z"],
+            0, # no tidal
+            0, # no tidal
             params["d_L"],
             0,
             params["phase_c"],
@@ -139,8 +147,8 @@ class RippleIMRPhenomD_NRTidalv2(Waveform):
             params["eta"],
             params["s1_z"],
             params["s2_z"],
-            params["lambda1"],
-            params["lambda2"],
+            params["lambda_tilde"],
+            params["delta_lambda_tilde"],
             params["d_L"],
             0,
             params["phase_c"],

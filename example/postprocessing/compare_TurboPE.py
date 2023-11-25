@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt 
 import corner
 import pandas as pd
+import copy
 
 ### Utilities
 
@@ -65,11 +66,31 @@ def get_chains(event, data_path = "../../data/"):
         flowMC_chains[:,9] = np.arcsin(flowMC_chains[:,9])
     return flowMC_chains, bilby_chains
 
+def weight_function(x):
+    return x**2
+
+def reweigh_distance(chains, d_idx = 4):
+    
+    # TODO reweigh based on distance 
+    d_samples = chains[:, d_idx]
+    weights = weight_function(d_samples)
+    weights = weights / np.sum(weights)
+    # resampled = np.random.choice(d_samples, size=len(d_samples), p=weights)
+    
+    # new_chains = copy.deepcopy(chains)
+    # new_chains[:, d_idx] = resampled
+    
+    return weights
+
 ### Fetch data
 
 which_list = ["production", "NF"]
+# outdir = "../GW170817_TaylorF2_no_tidal/outdir/"
 outdir = "../GW170817_reproduction/outdir/"
 corner_kwargs = default_corner_kwargs
+
+use_weights = True
+plot_turboPE = True
 
 for which in which_list:
     corner_kwargs["color"] = "blue"
@@ -89,16 +110,29 @@ for which in which_list:
         chains = data["chains"][:, [0,1,2,3,4,6,7,8,9,10]]
         chains = np.asarray(chains)
         print(np.shape(chains))
+    
     # TurboPE samples
     flowMC_chains, _ = get_chains('GW170817')
     print("Loading complete")
 
+    # Reweight based on distance
+    weights = reweigh_distance(chains)
+
     ### Plot
-    name = f"comparison_TurboPE_{which}.png"
-    print(f"Saving plot of chains to {name}")
     
-    fig = corner.corner(chains, labels = labels, hist_kwargs={'density': True}, **default_corner_kwargs)
+    if use_weights:
+        name = f"comparison_TurboPE_{which}_reweighted.png"
+    
+    if not use_weights:
+        name = f"comparison_TurboPE_{which}.png"
+        weights = None
+    
+    print(f"Saving plot of chains to {outdir + name}")
+    
+    corner_kwargs["color"] = "blue"
+    fig = corner.corner(chains, labels = labels, weights=weights, hist_kwargs={'density': True}, **corner_kwargs)
     corner_kwargs["color"] = "red"
-    corner.corner(flowMC_chains, labels = labels, fig=fig, hist_kwargs={'density': True}, **corner_kwargs)
+    if plot_turboPE:
+        corner.corner(flowMC_chains, labels = labels, fig=fig, hist_kwargs={'density': True}, **corner_kwargs)
     fig.savefig(outdir + name, bbox_inches='tight')  
     print("Done")

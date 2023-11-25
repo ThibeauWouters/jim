@@ -15,7 +15,6 @@ import time
 import numpy as np
 from lal import GreenwichMeanSiderealTime
 jax.config.update("jax_enable_x64", True)
-import pickle
 from astropy.time import Time
 
 # import urllib.request
@@ -49,7 +48,7 @@ params = {
 }
 plt.rcParams.update(params)
 
-labels = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$d_{\rm{L}}/{\rm Mpc}$',
+labels = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$\Lambda$', r'$\delta\Lambda$', r'$d_{\rm{L}}/{\rm Mpc}$',
                r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
 
 ### Data definitions
@@ -117,23 +116,23 @@ V1.psd = V1_psd
 
 # TODO double-check whether these are params before or after transformation
 
-prior_range = jnp.array([[1.18,1.21],[0.125,1],[-0.05,0.05],[-0.05,0.05],[1,75],[-0.01,0.02],[0,2*np.pi],[-1,1],[0,np.pi],[0,2*np.pi],[-1,1]])
-n_chains = 1000
-n_dim = 11
-rng_key_set = initialize_rng_keys(n_chains, seed=42)
-initial_position = jax.random.uniform(rng_key_set[0], shape=(int(n_chains), n_dim)) * 1
-for i in range(n_dim):
-    initial_position = initial_position.at[:,i].set(initial_position[:,i]*(prior_range[i,1]-prior_range[i,0])+prior_range[i,0])
+# prior_range = jnp.array([[1.18,1.21],[0.125,1],[-0.05,0.05],[-0.05,0.05],[1,75],[-0.01,0.02],[0,2*np.pi],[-1,1],[0,np.pi],[0,2*np.pi],[-1,1]])
+# rng_key_set = initialize_rng_keys(n_chains, seed=42)
+# initial_position = jax.random.uniform(rng_key_set[0], shape=(int(n_chains), n_dim)) * 1
+# for i in range(n_dim):
+#     initial_position = initial_position.at[:,i].set(initial_position[:,i]*(prior_range[i,1]-prior_range[i,0])+prior_range[i,0])
     
 # Prior
 prior = Uniform(
-    xmin=[1.18, 0.125, -0.05, -0.05,  1.0, -0.1,        0.0, -1.0,    0.0,        0.0, -1],
-    xmax=[1.21,   1.0,  0.05,  0.05, 75.0,  0.1, 2 * jnp.pi,  1.0, jnp.pi, 2 * jnp.pi,  1],
+    xmin=[1.18, 0.125, -0.05, -0.05,    0.0, -500.0,  1.0, -0.1,        0.0, -1.0,    0.0,        0.0, -1],
+    xmax=[1.21,   1.0,  0.05,  0.05, 3000.0,  500.0, 75.0,  0.1, 2 * jnp.pi,  1.0, jnp.pi, 2 * jnp.pi,  1],
     naming=[
         "M_c",
         "q",
         "s1_z", 
         "s2_z", 
+        "lambda_tilde",
+        "delta_lambda_tilde",
         "d_L",
         "t_c",
         "phase_c",
@@ -149,32 +148,40 @@ prior = Uniform(
 
 ### Create likelihood object
 
-ref_params = {'M_c': 1.19757891, 
-              'eta': 0.23462523, 
-              's1_z': 0.04999954, 
-              's2_z': 0.00300504,  
-              'd_L': 24.611064, 
-              't_c': -0.00119876, 
-              'phase_c': 6.14522284, 
-              'iota': 1.32743825, 
-              'psi': 2.33057612,
-              'ra': 3.9419984, 
-              'dec': -1.17831877}
 
-likelihood = HeterodynedTransientLikelihoodFD([H1, L1, V1], prior=prior, bounds=[prior.xmin, prior.xmax], waveform=RippleIMRPhenomD(), trigger_time=gps, duration=T, n_bins=500, ref_params=ref_params)
+# TODO get the parameters here!
+ref_params = {'M_c': 1.19754835, 
+              'eta': 0.24211905, 
+              's1_z': 0.04992184, 
+              's2_z': -0.0375549, 
+              'lambda_tilde': 236.19042388, 
+              'delta_lambda_tilde': 95.33493973, 
+              'd_L': 19.27281561, 
+              't_c': 0.0326196, 
+              'phase_c': 4.43696823, 
+              'iota': 1.73586993, 
+              'psi': 2.04194889, 
+              'ra': 1.72313012, 
+              'dec': 0.72667927
+}
+
+likelihood = HeterodynedTransientLikelihoodFD([H1, L1, V1], prior=prior, bounds=[prior.xmin, prior.xmax], waveform=RippleTaylorF2(), trigger_time=gps, duration=T, n_bins=500, ref_params=ref_params)
 
 ### Create sampler and jim objects
 
 # Mass matrix (this is copy pasted from the TurboPE set up)
-eps = 3e-2
-mass_matrix = jnp.eye(11)
+# TODO get automated mass matrix, or make sure this doesn't break things
+eps = 1e-3
+n_chains = 1000
+n_dim = 13
+mass_matrix = jnp.eye(n_dim)
 mass_matrix = mass_matrix.at[0,0].set(1e-5)
 mass_matrix = mass_matrix.at[1,1].set(1e-4)
 mass_matrix = mass_matrix.at[2,2].set(1e-3)
 mass_matrix = mass_matrix.at[3,3].set(1e-3)
-mass_matrix = mass_matrix.at[5,5].set(1e-5)
-mass_matrix = mass_matrix.at[9,9].set(1e-2)
-mass_matrix = mass_matrix.at[10,10].set(1e-2)
+mass_matrix = mass_matrix.at[7,7].set(1e-5)
+mass_matrix = mass_matrix.at[11,11].set(1e-2)
+mass_matrix = mass_matrix.at[12,12].set(1e-2)
 local_sampler_arg = {"step_size": mass_matrix * eps}
 
 outdir_name = "./outdir/"
@@ -182,9 +189,9 @@ outdir_name = "./outdir/"
 jim = Jim(
     likelihood,
     prior,
-    n_loop_pretraining=100,
+    n_loop_pretraining=30,
     n_loop_training=200,
-    n_loop_production=20,
+    n_loop_production=200,
     n_local_steps=200,
     n_global_steps=200,
     n_chains=n_chains,
@@ -195,10 +202,10 @@ jim = Jim(
     batch_size=50000,
     use_global=True,
     keep_quantile=0.0,
-    train_thinning=1,
+    train_thinning=10,
     output_thinning=30,    
-    num_layers = 6,
-    hidden_size = [32,32],
+    # num_layers = 6,
+    # hidden_size = [32,32],
     n_loops_maximize_likelihood = 2000,
     local_sampler_arg=local_sampler_arg,
     outdir_name=outdir_name
@@ -257,9 +264,10 @@ name = outdir_name + "results_production.png"
 
 data = np.load(file)
 # TODO improve the following: ignore t_c, and reshape with n_dims, and do conversions
-chains = data['chains'][:,:,[0,1,2,3,4,6,7,8,9,10]].reshape(-1,10)
-chains[:,6] = np.arccos(chains[:,6])
-chains[:,9] = np.arcsin(chains[:,9])
+idx_list = [0,1,2,3,4,5,6,8,9,10,11,12]
+chains = data['chains'][:,:,idx_list].reshape(-1,12)
+chains[:,8] = np.arccos(chains[:,8])
+chains[:,11] = np.arcsin(chains[:,11])
 chains = np.asarray(chains)
 corner_kwargs = default_corner_kwargs
 fig = corner.corner(chains, labels = labels, hist_kwargs={'density': True}, **default_corner_kwargs)
@@ -274,7 +282,7 @@ print("np.shape(data)")
 print(np.shape(data))
 
 # TODO improve the following: ignore t_c, and reshape with n_dims, and do conversions
-chains = data[:, [0,1,2,3,4,6,7,8,9,10]]
+chains = data[:, idx_list]
 # chains[:,6] = np.arccos(chains[:,6])
 # chains[:,9] = np.arcsin(chains[:,9]) # TODO not sure if this is still necessary?
 chains = np.asarray(chains)
