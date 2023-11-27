@@ -5,53 +5,22 @@ from jimgw.likelihood import HeterodynedTransientLikelihoodFD, TransientLikeliho
 from jimgw.waveform import RippleIMRPhenomD, RippleTaylorF2
 from jimgw.prior import Uniform
 # ripple
-# flowmc
-from flowMC.utils.PRNG_keys import initialize_rng_keys
 # jax
 import jax.numpy as jnp
 import jax
 # others
 import time
 import numpy as np
-from lal import GreenwichMeanSiderealTime
 jax.config.update("jax_enable_x64", True)
-from astropy.time import Time
 
-# import urllib.request
-import os
-import shutil
 import numpy as np
 import matplotlib.pyplot as plt
-import corner
+import csv
 
-# TODO move!!!
-default_corner_kwargs = dict(bins=40, 
-                        smooth=1., 
-                        show_titles=False,
-                        label_kwargs=dict(fontsize=16),
-                        title_kwargs=dict(fontsize=16), 
-                        color="blue",
-                        # quantiles=[],
-                        # levels=[0.9],
-                        plot_density=True, 
-                        plot_datapoints=False, 
-                        fill_contours=True,
-                        max_n_ticks=4, 
-                        min_n_ticks=3,
-                        save=False)
+from evosax import Strategies
 
-params = {
-    "axes.labelsize": 30,
-    "axes.titlesize": 30,
-    "text.usetex": True,
-    "font.family": "serif",
-}
-plt.rcParams.update(params)
-
-labels = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$\Lambda$', r'$\delta\Lambda$', r'$d_{\rm{L}}/{\rm Mpc}$',
-               r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
-
-chosen_device = jax.devices()[3] # e.g. device with index 2
+# Choose our GPU device
+chosen_device = jax.devices()[3]
 jax.config.update("jax_platform_name", "gpu")
 jax.config.update("jax_default_device", chosen_device)
 
@@ -69,8 +38,6 @@ duration = T
 post_trigger_duration = 2
 epoch = duration - post_trigger_duration
 f_ref = fmin 
-# gmst = GreenwichMeanSiderealTime(trigger_time)
-# gsmt = Time(trigger_time, format="gps").sidereal_time("apparent", "greenwich").rad
 
 ### Getting detector data
 
@@ -117,7 +84,6 @@ V1.frequencies = V1_frequency
 V1.data = V1_data
 V1.psd = V1_psd 
 
-
 # TODO double-check whether these are params before or after transformation
 
 # prior_range = jnp.array([[1.18,1.21],[0.125,1],[-0.05,0.05],[-0.05,0.05],[1,75],[-0.01,0.02],[0,2*np.pi],[-1,1],[0,np.pi],[0,2*np.pi],[-1,1]])
@@ -150,31 +116,48 @@ prior = Uniform(
                  "sin_dec": ("dec",lambda params: jnp.arcsin(jnp.arcsin(jnp.sin(params['sin_dec']/2*jnp.pi))*2/jnp.pi))}
 )
 
-### Create likelihood object
-
-
-# TODO get the parameters here!
-
-# ref_params = {'M_c': 1.19754835, 
-#               'eta': 0.24211905, 
-#               's1_z': 0.04992184, 
-#               's2_z': -0.0375549, 
-#               'lambda_tilde': 236.19042388, 
-#               'delta_lambda_tilde': 95.33493973, 
-#               'd_L': 19.27281561, 
-#               't_c': 0.0326196, 
-#               'phase_c': 4.43696823, 
-#               'iota': 1.73586993, 
-#               'psi': 2.04194889, 
-#               'ra': 1.72313012, 
-#               'dec': 0.72667927
-# }
+# All knwon ES names
+ES_names = Strategies.keys()
 
 # The following line will (by default) automatically print the parameters of the reference waveform
 n_walkers = 200
 n_loops = 200
-which_ES = "CMA_ES"
-print(f"Running with {n_walkers} walkers and {n_loops} loops and {which_ES} ES.")
-likelihood = HeterodynedTransientLikelihoodFD([H1, L1, V1], prior=prior, bounds=[prior.xmin, prior.xmax], waveform=RippleTaylorF2(), trigger_time=gps, duration=T, n_bins=500, n_walkers = n_walkers, n_loops = n_loops)
+ES_list = ["CMA_ES", "OpenES"]
+
+# Initialize a new CSV file
+CSV_filename = "GW170817_ES.csv"
+with open(CSV_filename, 'w', newline='') as csvfile:
+    csvwriter = csv.writer(csvfile)
+    csvwriter.writerow(["ES_name", "best_fitness", "best_member", "elapsed_time"])
+
+# The following for loop will iterate over a given list of keys of ES strategies to be used in likelihood. 
+# Then, it will run the likelihood with the given ES strategy and print the elapsed time.
+# Finally, we save everything to one single big CSV file.
+
+for which_ES in ES_list:
+    start = time.time()
+    print(f"Running with {n_walkers} walkers and {n_loops} loops and {which_ES} ES.")
+    likelihood = HeterodynedTransientLikelihoodFD([H1, L1, V1], 
+                                                  prior=prior, 
+                                                  bounds=[prior.xmin, prior.xmax], 
+                                                  waveform=RippleTaylorF2(), 
+                                                  trigger_time=gps, 
+                                                  duration=T, 
+                                                  n_bins=500, 
+                                                  n_walkers = n_walkers, # TODO rename to popsize
+                                                  n_loops = n_loops, 
+                                                  which_ES=which_ES
+                                                  )
+    
+    best_member, best_result = likelihood.best_member, likelihood.best_result
+    end = time.time()
+    elapsed = end - start
+    
+    # Save results to CSV
+    with open(CSV_filename, 'a', newline='') as csvfile:
+        csvwriter = csv.writer(csvfile)
+        csvwriter.writerow([which_ES, best_result, best_member, elapsed])
+    
+    print(f"Elapsed time: {elapsed} seconds.")
 
 

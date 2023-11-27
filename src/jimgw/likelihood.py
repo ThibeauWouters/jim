@@ -416,6 +416,9 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         n_loops: int = 2000,
         which_ES: str = "CMA_ES"
     ):
+        
+        # TODO remove after debugging is done
+        print(f"which_ES is {which_ES}")
         bounds = jnp.array(bounds).T
         n_walkers = n_walkers
 
@@ -429,4 +432,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         state = optimizer.optimize(y, bounds, n_loops=n_loops)
         best_fit = optimizer.get_result()[0]
         self.best_fit_params = best_fit
+        best_member, best_result = optimizer.get_result()
+        self.best_member = best_member # TODO remove afterwards!!!
+        self.best_result = best_result
         return prior.add_name(best_fit, transform_name=True, transform_value=True)
