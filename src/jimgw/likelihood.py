@@ -147,7 +147,8 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         post_trigger_duration: float = 2,
         n_walkers: int = 100,
         n_loops: int = 2000,
-        ref_params: Array = None
+        ref_params: Array = None,
+        which_ES: str = "CMA_ES"
     ) -> None:
         super().__init__(
             detectors, waveform, trigger_time, duration, post_trigger_duration
@@ -161,7 +162,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
 
         if ref_params is None:
             ref_params = self.maximize_likelihood(
-                bounds=bounds, prior=prior, set_nwalkers=n_walkers, n_loops=n_loops
+                bounds=bounds, prior=prior, n_walkers=n_walkers, n_loops=n_loops, which_ES=which_ES
             )
         # else:
         #     # TODO change so that users have to give the dictionary rather than the array itself to avoid having to do the tranformations here.
@@ -411,11 +412,12 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         self,
         bounds: tuple[Array, Array],
         prior: Prior,
-        set_nwalkers: int = 100,
+        n_walkers: int = 100,
         n_loops: int = 2000,
+        which_ES: str = "CMA_ES"
     ):
         bounds = jnp.array(bounds).T
-        set_nwalkers = set_nwalkers
+        n_walkers = n_walkers
 
         y = lambda x: -self.evaluate_original(
             prior.add_name(x, transform_name=True, transform_value=True), None
@@ -423,7 +425,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         y = jax.jit(jax.vmap(y))
 
         print("Starting the optimizer")
-        optimizer = EvolutionaryOptimizer(len(bounds), verbose=True)
+        optimizer = EvolutionaryOptimizer(len(bounds), verbose=True, popsize=n_walkers, which_ES=which_ES)
         state = optimizer.optimize(y, bounds, n_loops=n_loops)
         best_fit = optimizer.get_result()[0]
         self.best_fit_params = best_fit

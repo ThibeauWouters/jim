@@ -85,8 +85,8 @@ def reweigh_distance(chains, d_idx = 4):
 ### Fetch data
 
 which_list = ["production", "NF"]
-# outdir = "../GW170817_TaylorF2_no_tidal/outdir/"
-outdir = "../GW170817_reproduction/outdir/"
+outdir = "../GW170817_TaylorF2_no_tidal/outdir/"
+# outdir = "../GW170817_reproduction/outdir/"
 corner_kwargs = default_corner_kwargs
 
 use_weights = True
