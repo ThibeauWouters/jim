@@ -70,32 +70,43 @@ def get_chains(event, data_path = "../../data/"):
         flowMC_chains[:,9] = np.arcsin(flowMC_chains[:,9])
     return flowMC_chains, bilby_chains
 
-### Fetch data
+### Postprocessing analysis tools
 
 def weight_function(x):
     return x**2
 
-def reweigh_distance(chains, d_idx = 4):
+# TODO improve getting the index right
+def reweigh_distance(chains, d_idx = 6):
     """
     Get weights based on distance to mimic cosmological distance prior.
     """
     d_samples = chains[:, d_idx]
+    print(d_samples)
     weights = weight_function(d_samples)
     weights = weights / np.sum(weights)
     
     return weights
 
+def powerlaw_transform(d_L_quantile, max_distance:float=75, alpha:float=2):
+    return (1.0 ** (1 + alpha) + d_L_quantile * (max_distance ** (1 + alpha) - 1.0 ** (1 + alpha))) ** (1. / (1 + alpha))
 
-which_list = ["NF", "production"]
+### Fetch data
+
+which_list = ["production", "NF"]
+# outdir = "/home/thibeau.wouters/public_html/jim_runs/GW170817_TaylorF2/outdir/"
 outdir = "../GW170817_TaylorF2/outdir/"
 corner_kwargs = default_corner_kwargs
 
+print(f"Reading data from {outdir}")
 idx_list = [0,1,2,3,4,5,6,8,9,10,11,12]
 
 ### Plotting hyperparameters
 
 use_weights = True
+use_d_L_quantile = False
 use_chi_eff = True
+
+print(f"Creating plots with use_weights={use_weights}, use_d_L_quantile={use_d_L_quantile}, use_chi_eff={use_chi_eff}")
 
 ### Plotting
 for which in which_list:
@@ -109,13 +120,15 @@ for which in which_list:
         chains = data['chains'][:,:,idx_list].reshape(-1,12)
         chains[:,8] = np.arccos(chains[:,8])
         chains[:,11] = np.arcsin(chains[:,11])
+        if use_d_L_quantile:
+            chains[:,6] = powerlaw_transform(chains[:,6])
         chains = np.asarray(chains)
-        print(np.shape(chains))
     else:
         data = np.load(filename)
         chains = data["chains"][:, idx_list]
+        if use_d_L_quantile:
+            chains[:,6] = powerlaw_transform(chains[:,6])
         chains = np.asarray(chains)
-        print(np.shape(chains))
     
     # Reweight based on distance
     weights = reweigh_distance(chains)
@@ -144,11 +157,6 @@ for which in which_list:
         
         params = jnp.array([m1, m2, chi1, chi2])
         chi_eff = get_chi_eff(params)
-        
-        print("chi_eff")
-        print(chi_eff)
-        print("np.shape(chi_eff)")
-        print(np.shape(chi_eff))
         
         # Now, we remove the second and third column from chains, and add chi_eff as new column at index 2
         chains = np.delete(chains, [2,3], axis=1)

@@ -48,6 +48,15 @@ params = {
 }
 plt.rcParams.update(params)
 
+os.environ['CUDA_VISIBLE_DEVICES'] = '2,3'
+
+# Choose the desired GPU device -- useful in case there are multiple in use
+chosen_device = jax.devices()[2]
+jax.config.update("jax_platform_name", "gpu")
+jax.config.update("jax_default_device", chosen_device)
+
+
+
 labels = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$\Lambda$', r'$\delta\Lambda$', r'$d_{\rm{L}}/{\rm Mpc}$',
                r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
 
@@ -148,8 +157,11 @@ prior = Uniform(
 
 ### Create likelihood object
 
+
 # TODO get the parameters here!
 ref_params = None
+
+# TODO change back to HeterodynedTransientLikelihoodFD
 
 likelihood = HeterodynedTransientLikelihoodFD([H1, L1, V1], prior=prior, bounds=[prior.xmin, prior.xmax], waveform=RippleIMRPhenomD_NRTidalv2(), trigger_time=gps, duration=T, n_bins=500, ref_params=ref_params)
 
@@ -157,7 +169,7 @@ likelihood = HeterodynedTransientLikelihoodFD([H1, L1, V1], prior=prior, bounds=
 
 # Mass matrix (this is copy pasted from the TurboPE set up)
 # TODO get automated mass matrix, or make sure this doesn't break things
-eps = 5e-5
+eps = 1e-3
 n_chains = 1000
 n_dim = 13
 mass_matrix = jnp.eye(n_dim)

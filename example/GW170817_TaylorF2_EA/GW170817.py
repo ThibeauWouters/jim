@@ -122,7 +122,8 @@ ES_names = Strategies.keys()
 # The following line will (by default) automatically print the parameters of the reference waveform
 n_walkers = 200
 n_loops = 200
-ES_list = ["CMA_ES", "OpenES"]
+# ES_list = ["CMA_ES", "OpenES"]
+ES_list = ES_names
 
 # Initialize a new CSV file
 CSV_filename = "GW170817_ES.csv"

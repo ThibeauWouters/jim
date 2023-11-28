@@ -132,9 +132,11 @@ V1.psd = V1_psd
 #     initial_position = initial_position.at[:,i].set(initial_position[:,i]*(prior_range[i,1]-prior_range[i,0])+prior_range[i,0])
     
 # Prior
+max_distance = 75.0
+alpha = 2.0
 prior = Uniform(
-    xmin=[1.18, 0.125, -0.05, -0.05,    0.0, -500.0,  1.0, -0.1,        0.0, -1.0,    0.0,        0.0, -1],
-    xmax=[1.21,   1.0,  0.05,  0.05, 3000.0,  500.0, 75.0,  0.1, 2 * jnp.pi,  1.0, jnp.pi, 2 * jnp.pi,  1],
+    xmin=[1.18, 0.125, -0.05, -0.05,    0.0, -500.0, 0.0, -0.1,        0.0, -1.0,    0.0,        0.0, -1],
+    xmax=[1.21,   1.0,  0.05,  0.05, 3000.0,  500.0, 1.0,  0.1, 2 * jnp.pi,  1.0, jnp.pi, 2 * jnp.pi,  1],
     naming=[
         "M_c",
         "q",
@@ -142,7 +144,7 @@ prior = Uniform(
         "s2_z", 
         "lambda_tilde",
         "delta_lambda_tilde",
-        "d_L",
+        "d_L_quantile",
         "t_c",
         "phase_c",
         "cos_iota",
@@ -152,7 +154,8 @@ prior = Uniform(
     ],
     transforms = {"q": ("eta", lambda params: params['q']/(1+params['q'])**2),
                  "cos_iota": ("iota",lambda params: jnp.arccos(jnp.arcsin(jnp.sin(params['cos_iota']/2*jnp.pi))*2/jnp.pi)),
-                 "sin_dec": ("dec",lambda params: jnp.arcsin(jnp.arcsin(jnp.sin(params['sin_dec']/2*jnp.pi))*2/jnp.pi))}
+                 "sin_dec": ("dec",lambda params: jnp.arcsin(jnp.arcsin(jnp.sin(params['sin_dec']/2*jnp.pi))*2/jnp.pi)),
+                 "d_L_quantile": ("d_L", lambda params: (1.0 ** (1 + alpha) + params['d_L_quantile'] * (max_distance ** (1 + alpha) - 1.0 ** (1 + alpha))) ** (1. / (1 + alpha)))}
 )
 
 ### Create likelihood object
