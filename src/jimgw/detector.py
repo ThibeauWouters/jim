@@ -7,6 +7,7 @@ import equinox as eqx
 from jaxtyping import Array, PRNGKeyArray
 import jax
 from gwpy.timeseries import TimeSeries
+from gwpy.timeseries import timeseries
 from typing import Callable
 import requests
 import numpy as np
@@ -320,6 +321,38 @@ class GroundBased2G(Detector):
         psd_vals = asd_vals**2
         psd = interp1d(f, psd_vals, fill_value=(psd_vals[0], psd_vals[-1]))(freqs)
         return psd
+    
+    def load_psd_from_file(self, psd_file: str) -> None:
+        # TODO need to have frequencies for this to work
+        f, psd_vals = np.genfromtxt(psd_file).T
+        psd = interp1d(f, psd_vals, fill_value=(psd_vals[0], psd_vals[-1]))(self.frequencies)
+        self.psd = psd
+    
+    def load_data_from_frame(self,
+                            trigger_time: float,
+                            gps_start_pad: int,
+                            gps_end_pad: int,
+                            frame_file_path: str,
+                            channel_name: str,
+                            f_min: float,
+                            f_max: float,
+                            tukey_alpha: float = 0.2) -> None: 
+
+        print(f'Fetching data from frame file for {self.name}...')
+        data_td = TimeSeries.read(frame_file_path, f'{self.name}:{channel_name}',
+                                start = trigger_time - gps_start_pad,
+                                end = trigger_time + gps_end_pad)
+        # segment_length = data_td.duration.value # TODO unused?
+        n = len(data_td)
+        delta_t = data_td.dt.value
+        data = jnp.fft.rfft(jnp.array(data_td.value) * tukey(n, tukey_alpha)) * delta_t
+        freq = jnp.fft.rfftfreq(n, delta_t)
+
+        print("Finished reading the data.")
+
+        self.frequencies = freq[(freq > f_min) & (freq < f_max)]
+        self.data = data[(freq > f_min) & (freq < f_max)]
+
 
 H1 = GroundBased2G('H1',
 latitude = (46 + 27. / 60 + 18.528 / 3600) * DEG_TO_RAD,

@@ -4,6 +4,7 @@ from jimgw.detector import H1, L1, V1
 from jimgw.likelihood import HeterodynedTransientLikelihoodFD, TransientLikelihoodFD
 from jimgw.waveform import RippleIMRPhenomD_NRTidalv2
 from jimgw.prior import Uniform
+from jimgw.fisher_information_matrix import FisherInformationMatrix
 # ripple
 # flowmc
 from flowMC.utils.PRNG_keys import initialize_rng_keys
@@ -31,8 +32,6 @@ default_corner_kwargs = dict(bins=40,
                         label_kwargs=dict(fontsize=16),
                         title_kwargs=dict(fontsize=16), 
                         color="blue",
-                        # quantiles=[],
-                        # levels=[0.9],
                         plot_density=True, 
                         plot_datapoints=False, 
                         fill_contours=True,
@@ -157,9 +156,20 @@ prior = Uniform(
 
 ### Create likelihood object
 
-
-# TODO get the parameters here!
-ref_params = None
+ref_params = {'M_c': 1.19755206, 
+              'eta': 0.24168149, 
+              's1_z': 0.04976656, 
+              's2_z': -0.03608625, 
+              'lambda_tilde': 152.89049789, 
+              'delta_lambda_tilde': -17.72076953, 
+              'd_L': 11.55338337, 
+              't_c': 0.00048855, 
+              'phase_c': 5.7032479, 
+              'iota': 1.81399029, 
+              'psi': 1.59702883, 
+              'ra': 3.41808648, 
+              'dec': -0.40636011
+}
 
 # TODO change back to HeterodynedTransientLikelihoodFD
 
@@ -169,7 +179,7 @@ likelihood = HeterodynedTransientLikelihoodFD([H1, L1, V1], prior=prior, bounds=
 
 # Mass matrix (this is copy pasted from the TurboPE set up)
 # TODO get automated mass matrix, or make sure this doesn't break things
-eps = 1e-3
+eps = 1e-6
 n_chains = 1000
 n_dim = 13
 mass_matrix = jnp.eye(n_dim)
@@ -182,6 +192,15 @@ mass_matrix = mass_matrix.at[11,11].set(1e-2)
 mass_matrix = mass_matrix.at[12,12].set(1e-2)
 local_sampler_arg = {"step_size": mass_matrix * eps}
 
+
+### Check the Fisher information matrix for autotuning the mass matrix
+fim = FisherInformationMatrix([H1, L1, V1], waveform=RippleIMRPhenomD_NRTidalv2(), trigger_time=gps, duration=T, post_trigger_duration=post_trigger_duration)
+tuned_mass_matrix = fim.tune_mass_matrix(prior, RippleIMRPhenomD_NRTidalv2(), ref_params, H1.frequencies)
+local_sampler_arg = {"step_size": tuned_mass_matrix * 1e-8}
+
+print("tuned_mass_matrix")
+print(jnp.diag(tuned_mass_matrix))
+
 outdir_name = "./outdir/"
 
 jim = Jim(
@@ -190,11 +209,11 @@ jim = Jim(
     n_loop_pretraining=0,
     n_loop_training=200,
     n_loop_production=200,
-    n_local_steps=200,
-    n_global_steps=200,
+    n_local_steps=10,
+    n_global_steps=10,
     n_chains=n_chains,
     n_epochs=100,
-    learning_rate=0.001,
+    learning_rate=0.0001,
     max_samples=50000,
     momentum=0.9,
     batch_size=50000,
@@ -202,8 +221,8 @@ jim = Jim(
     keep_quantile=0.0,
     train_thinning=10,
     output_thinning=30,    
-    # num_layers = 6,
-    # hidden_size = [32,32],
+    num_layers = 6,
+    hidden_size = [32,32],
     n_loops_maximize_likelihood = 2000,
     local_sampler_arg=local_sampler_arg,
     outdir_name=outdir_name

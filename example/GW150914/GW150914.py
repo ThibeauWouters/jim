@@ -31,8 +31,8 @@ H1.load_data(gps, 2, 2, fmin, fmax, psd_pad=16, tukey_alpha=0.2)
 L1.load_data(gps, 2, 2, fmin, fmax, psd_pad=16, tukey_alpha=0.2)
 
 prior = Uniform(
-    xmin=[10, 0.125, -1.0, -1.0, 0.0, -0.05, 0.0, -1, 0.0, 0.0, -1.0],
-    xmax=[80.0, 1.0, 1.0, 1.0, 2000.0, 0.05, 2 * jnp.pi, 1.0, jnp.pi, 2 * jnp.pi, 1.0],
+    xmin=[10, 0.125, -1.0, -1.0,    0.0, -0.05,        0.0, -1.0,    0.0,        0.0, -1.0],
+    xmax=[80.0, 1.0,  1.0,  1.0, 2000.0,  0.05, 2 * jnp.pi,  1.0, jnp.pi, 2 * jnp.pi,  1.0],
     naming=[
         "M_c",
         "q",
@@ -63,12 +63,12 @@ jim = Jim(
     likelihood,
     prior,
     n_loop_pretraining=0,
-    n_loop_training=20,
-    n_loop_production=10,
-    n_local_steps=150,
-    n_global_steps=50,
+    n_loop_training=200,
+    n_loop_production=50,
+    n_local_steps=200,
+    n_global_steps=200,
     n_chains=1000,
-    n_epochs=50,
+    n_epochs=100,
     learning_rate=0.001,
     max_samples=45000,
     momentum=0.9,
