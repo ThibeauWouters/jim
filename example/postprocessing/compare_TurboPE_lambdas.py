@@ -93,7 +93,7 @@ def powerlaw_transform(d_L_quantile, max_distance:float=75, alpha:float=2):
 ### Fetch data
 
 which_list = ["production", "NF"]
-outdir = "../GW170817_TaylorF2_distance_quantile/outdir/"
+outdir = "../GW190425_TaylorF2/outdir/"
 corner_kwargs = default_corner_kwargs
 
 print(f"Reading data from {outdir}")
@@ -101,8 +101,8 @@ idx_list = [0,1,2,3,4,5,6,8,9,10,11,12]
 
 ### Plotting hyperparameters
 
-use_weights = False
-use_d_L_quantile = True
+use_weights = True
+use_d_L_quantile = False
 use_chi_eff = True
 
 print(f"Creating plots with use_weights={use_weights}, use_d_L_quantile={use_d_L_quantile}, use_chi_eff={use_chi_eff}")

@@ -1,3 +1,6 @@
+import os
+import numpy as np
+
 import time
 from jimgw.jim import Jim
 from jimgw.detector import H1, L1
@@ -7,10 +10,44 @@ from jimgw.prior import Uniform
 import jax.numpy as jnp
 import jax
 
+import matplotlib.pyplot as plt
+import shutil
+import corner
+
 # from flowMC.utils.diagnosis import Diagnosis
 from flowMC.utils import gelman_rubin
 
 jax.config.update("jax_enable_x64", True)
+
+# TODO move!!!
+default_corner_kwargs = dict(bins=40, 
+                        smooth=1., 
+                        show_titles=False,
+                        label_kwargs=dict(fontsize=16),
+                        title_kwargs=dict(fontsize=16), 
+                        color="blue",
+                        # quantiles=[],
+                        # levels=[0.9],
+                        plot_density=True, 
+                        plot_datapoints=False, 
+                        fill_contours=True,
+                        max_n_ticks=4, 
+                        min_n_ticks=3,
+                        save=False)
+
+params = {
+    "axes.labelsize": 30,
+    "axes.titlesize": 30,
+    "text.usetex": True,
+    "font.family": "serif",
+}
+plt.rcParams.update(params)
+
+# labels = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$\Lambda$', r'$\delta\Lambda$', r'$d_{\rm{L}}/{\rm Mpc}$',
+#                r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
+
+labels = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$d_{\rm{L}}/{\rm Mpc}$',
+               r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
 
 ###########################################
 ########## First we grab data #############
@@ -51,20 +88,20 @@ prior = Uniform(
                  "sin_dec": ("dec",lambda params: jnp.arcsin(jnp.arcsin(jnp.sin(params['sin_dec']/2*jnp.pi))*2/jnp.pi))} # sin and arcsin are periodize cos_iota and sin_dec
 )
 likelihood = TransientLikelihoodFD([H1, L1], waveform=RippleIMRPhenomD(), trigger_time=gps, duration=4, post_trigger_duration=2)
-# likelihood = HeterodynedTransientLikelihoodFD([H1, L1], prior=prior, bounds=[prior.xmin, prior.xmax], waveform=RippleIMRPhenomD(), trigger_time=gps, duration=4, post_trigger_duration=2)
-
 
 mass_matrix = jnp.eye(11)
 mass_matrix = mass_matrix.at[1, 1].set(1e-3)
 mass_matrix = mass_matrix.at[5, 5].set(1e-3)
 local_sampler_arg = {"step_size": mass_matrix * 3e-3}
 
+outdir_name = "./outdir/"
+
 jim = Jim(
     likelihood,
     prior,
     n_loop_pretraining=0,
     n_loop_training=200,
-    n_loop_production=50,
+    n_loop_production=200,
     n_local_steps=200,
     n_global_steps=200,
     n_chains=1000,
@@ -78,25 +115,89 @@ jim = Jim(
     train_thinning=1,
     output_thinning=10,
     local_sampler_arg=local_sampler_arg,
-    verbose=False
+    verbose=False,
+    outdir_name = outdir_name,
 )
 
-jim.maximize_likelihood([prior.xmin, prior.xmax])
+# jim.maximize_likelihood([prior.xmin, prior.xmax])
 jim.sample(jax.random.PRNGKey(42))
 jim.print_summary()
 
-print("Creating diagnosis")
+# === Show results, save output ===
 
+# Cleaning outdir
+for filename in os.listdir(outdir_name):
+    file_path = os.path.join(outdir_name, filename)
+    try:
+        if os.path.isfile(file_path) or os.path.islink(file_path):
+            os.unlink(file_path)
+        elif os.path.isdir(file_path):
+            shutil.rmtree(file_path)
+    except Exception as e:
+        print('Failed to delete %s. Reason: %s' % (file_path, e))
+
+### Summary
+jim.print_summary()
+
+### Diagnosis plots of summaries
+print("Creating plots")
 jim.Sampler.plot_summary("pretraining")
 jim.Sampler.plot_summary("training")
 jim.Sampler.plot_summary("production")
 
-print("Pretraining gelman-rubin")
-result = gelman_rubin(jim.Sampler.get_sampler_state("pretraining")["chains"])
-print(result)
-print("Training gelman-rubin")
-result = gelman_rubin(jim.Sampler.get_sampler_state("training")["chains"])
-print(result)
-print("Production gelman-rubin")
-result = gelman_rubin(jim.Sampler.get_sampler_state("production")["chains"])
-print(result)
+# TODO - save the NF object to sample from later on
+# print("Saving jim object (Normalizing flow)")
+# jim.Sampler.save_flow("my_nf_IMRPhenomD")
+
+### Write to 
+which_list = ["training", "production"]
+for which in which_list:
+    name = outdir_name + f'results_{which}.npz'
+    print(f"Saving {which} samples in npz format to {name}")
+    state = jim.Sampler.get_sampler_state(which)
+    chains, log_prob, local_accs, global_accs = state["chains"], state["log_prob"], state["local_accs"], state["global_accs"]
+    np.savez(name, chains=chains, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs)
+
+print("Sampling from the flow")
+chains = jim.Sampler.sample_flow(10000)
+name = outdir_name + 'results_NF.npz'
+print(f"Saving flow samples to {name}")
+np.savez(name, chains=chains)
+
+### Plot chains and samples
+
+# Production samples:
+file = outdir_name + "results_production.npz"
+name = outdir_name + "results_production.png"
+
+data = np.load(file)
+# TODO improve the following: ignore t_c, and reshape with n_dims, and do conversions
+idx_list = [0,1,2,3,4,6,7,8,9,10]
+chains = data['chains'][:,:,idx_list].reshape(-1,10)
+chains[:,6] = np.arccos(chains[:,6])
+chains[:,9] = np.arcsin(chains[:,9])
+chains = np.asarray(chains)
+corner_kwargs = default_corner_kwargs
+fig = corner.corner(chains, labels = labels, hist_kwargs={'density': True}, **default_corner_kwargs)
+fig.savefig(name, bbox_inches='tight')  
+
+# Production samples:
+file = outdir_name + "results_NF.npz"
+name = outdir_name + "results_NF.png"
+
+data = np.load(file)["chains"]
+print("np.shape(data)")
+print(np.shape(data))
+
+# TODO improve the following: ignore t_c, and reshape with n_dims, and do conversions
+chains = data[:, idx_list]
+# chains[:,6] = np.arccos(chains[:,6])
+# chains[:,9] = np.arcsin(chains[:,9]) # TODO not sure if this is still necessary?
+chains = np.asarray(chains)
+corner_kwargs = default_corner_kwargs
+fig = corner.corner(chains, labels = labels, hist_kwargs={'density': True}, **default_corner_kwargs)
+fig.savefig(name, bbox_inches='tight')  
+    
+    
+print("Saving the hyperparameters")
+jim.save_hyperparameters()

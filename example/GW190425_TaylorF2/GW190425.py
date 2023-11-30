@@ -2,7 +2,7 @@ import os
 # os.environ['CUDA_VISIBLE_DEVICES'] = '2,3'
 # jim
 from jimgw.jim import Jim
-from jimgw.detector import H1, L1, V1
+from jimgw.detector import L1, V1
 from jimgw.likelihood import HeterodynedTransientLikelihoodFD
 from jimgw.waveform import RippleTaylorF2
 from jimgw.prior import Uniform
@@ -175,11 +175,11 @@ jim = Jim(
     n_loop_pretraining=0,
     n_loop_training=200,
     n_loop_production=20,
-    n_local_steps=200,
-    n_global_steps=20,
+    n_local_steps=300,
+    n_global_steps=200,
     n_chains=n_chains,
     n_epochs=100,
-    learning_rate=0.001,
+    learning_rate=0.0001,
     max_samples=50000,
     momentum=0.9,
     batch_size=50000,
@@ -187,8 +187,8 @@ jim = Jim(
     keep_quantile=0.0,
     train_thinning=10,
     output_thinning=30,    
-    # num_layers = 6,
-    # hidden_size = [32,32],
+    num_layers = 6,
+    hidden_size = [32,32],
     local_sampler_arg=local_sampler_arg,
     outdir_name=outdir_name
 )
