@@ -1,3 +1,7 @@
+
+## OLD jim script
+
+
 from jimgw.jim import Jim
 from jimgw.detector import H1, L1, V1
 from jimgw.likelihood import HeterodynedTransientLikelihoodFD, TransientLikelihoodFD
@@ -14,11 +18,6 @@ from tqdm import tqdm
 import numpy as np
 
 jax.config.update("jax_enable_x64", True)
-
-# TODO define in shared dir
-prior_low  = np.array([10.0, 0.5, -0.5, -0.5,  300, -0.5,     0.0, -1,   0.0,     0.0, -1])
-prior_high = np.array([50.0, 1.0,  0.5,  0.5, 2000,  0.5, 2*np.pi,  1, np.pi, 2*np.pi,  1])
-params_names = ["mc", "q", "chi1", "chi2", "dist_mpc", "tc", "phic", "cos_inclination", "polarization_angle", "ra", "sin_dec"]
 
 
 # TODO change param names

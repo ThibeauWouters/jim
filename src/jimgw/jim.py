@@ -184,9 +184,9 @@ class Jim(object):
     def save_hyperparameters(self):
         import json
         
-        # TODO automatically change any ArrayImpl to np array?
         if "step_size" in self.hyperparameters["local_sampler_arg"].keys():
-            self.hyperparameters["local_sampler_arg"]["step_size"] = np.asarray(self.hyperparameters["local_sampler_arg"]["step_size"])
+            # Convert to list in order to save in json
+            self.hyperparameters["local_sampler_arg"]["step_size"] = np.asarray(self.hyperparameters["local_sampler_arg"]["step_size"]).tolist()
         
         hyperparameters_dict = {"flowmc": self.Sampler.hyperparameters,
                                 "jim": self.hyperparameters}

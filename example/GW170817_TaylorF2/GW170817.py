@@ -2,9 +2,8 @@
 from jimgw.jim import Jim
 from jimgw.detector import H1, L1, V1
 from jimgw.likelihood import HeterodynedTransientLikelihoodFD, TransientLikelihoodFD
-from jimgw.waveform import RippleTaylorF2
+from jimgw.waveform import RippleIMRPhenomD, RippleTaylorF2
 from jimgw.prior import Uniform
-from jimgw.fisher_information_matrix import FisherInformationMatrix
 # ripple
 # flowmc
 from flowMC.utils.PRNG_keys import initialize_rng_keys
@@ -55,6 +54,8 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '2,3'
 chosen_device = jax.devices()[2]
 jax.config.update("jax_platform_name", "gpu")
 jax.config.update("jax_default_device", chosen_device)
+
+
 
 labels = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$\Lambda$', r'$\delta\Lambda$', r'$d_{\rm{L}}/{\rm Mpc}$',
                r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
@@ -121,15 +122,6 @@ V1.frequencies = V1_frequency
 V1.data = V1_data
 V1.psd = V1_psd 
 
-
-# TODO double-check whether these are params before or after transformation
-
-# prior_range = jnp.array([[1.18,1.21],[0.125,1],[-0.05,0.05],[-0.05,0.05],[1,75],[-0.01,0.02],[0,2*np.pi],[-1,1],[0,np.pi],[0,2*np.pi],[-1,1]])
-# rng_key_set = initialize_rng_keys(n_chains, seed=42)
-# initial_position = jax.random.uniform(rng_key_set[0], shape=(int(n_chains), n_dim)) * 1
-# for i in range(n_dim):
-#     initial_position = initial_position.at[:,i].set(initial_position[:,i]*(prior_range[i,1]-prior_range[i,0])+prior_range[i,0])
-    
 # Prior
 prior = Uniform(
     xmin=[1.18, 0.125, -0.05, -0.05,    0.0, -500.0,  1.0, -0.1,        0.0, -1.0,    0.0,        0.0, -1],
@@ -195,13 +187,6 @@ mass_matrix = mass_matrix.at[7,7].set(1e-5)
 mass_matrix = mass_matrix.at[11,11].set(1e-2)
 mass_matrix = mass_matrix.at[12,12].set(1e-2)
 local_sampler_arg = {"step_size": mass_matrix * eps}
-
-### Check the Fisher information matrix for autotuning the mass matrix
-fim = FisherInformationMatrix([H1, L1, V1], waveform=RippleTaylorF2(), trigger_time=gps, duration=T, post_trigger_duration=post_trigger_duration)
-tuned_mass_matrix = fim.tune_mass_matrix(prior, RippleTaylorF2(), ref_params, H1.frequencies)
-
-print("tuned_mass_matrix")
-print(jnp.diag(tuned_mass_matrix))
 
 outdir_name = "./outdir/"
 

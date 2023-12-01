@@ -101,9 +101,10 @@ idx_list = [0,1,2,3,4,5,6,8,9,10,11,12]
 
 ### Plotting hyperparameters
 
-use_weights = True
+use_weights = False
 use_d_L_quantile = False
 use_chi_eff = True
+
 
 print(f"Creating plots with use_weights={use_weights}, use_d_L_quantile={use_d_L_quantile}, use_chi_eff={use_chi_eff}")
 

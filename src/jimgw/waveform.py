@@ -79,26 +79,34 @@ class RippleTaylorF2(Waveform):
 
     f_ref: float
 
-    def __init__(self, f_ref: float = 20.0):
+    def __init__(self, f_ref: float = 20.0, use_lambda_tildes: bool = True):
         self.f_ref = f_ref
+        self.use_lambda_tildes = use_lambda_tildes
 
     def __call__(self, frequency: Array, params: dict) -> dict:
         output = {}
         ra = params["ra"]
         dec = params["dec"]
+        if self.use_lambda_tildes:
+            first_lambda_params = params["lambda_tilde"]
+            second_lambda_params = params["delta_lambda_tilde"]
+        else:
+            first_lambda_params = params["lambda1"]
+            second_lambda_params = params["lambda2"]
+        
         theta = [
             params["M_c"],
             params["eta"],
             params["s1_z"],
             params["s2_z"],
-            params["lambda_tilde"],
-            params["delta_lambda_tilde"],
+            first_lambda_params,
+            second_lambda_params,
             params["d_L"],
             0,
             params["phase_c"],
             params["iota"],
         ]
-        hp, hc = gen_TaylorF2_hphc(frequency, theta, self.f_ref)
+        hp, hc = gen_TaylorF2_hphc(frequency, theta, self.f_ref, use_lambda_tildes=self.use_lambda_tildes)
         output["p"] = hp
         output["c"] = hc
         return output
@@ -138,23 +146,31 @@ class RippleIMRPhenomD_NRTidalv2(Waveform):
     def __init__(self, f_ref: float = 20.0):
         self.f_ref = f_ref
 
-    def __call__(self, frequency: Array, params: dict) -> dict:
+    def __call__(self, frequency: Array, params: dict, use_lambda_tildes: bool=True) -> dict:
         output = {}
         ra = params["ra"]
         dec = params["dec"]
+        
+        if use_lambda_tildes:
+            first_lambda_params = params["lambda_tilde"]
+            second_lambda_params = params["delta_lambda_tilde"]
+        else:
+            first_lambda_params = params["lambda1"]
+            second_lambda_params = params["lambda2"]
+        
         theta = [
             params["M_c"],
             params["eta"],
             params["s1_z"],
             params["s2_z"],
-            params["lambda_tilde"],
-            params["delta_lambda_tilde"],
+            first_lambda_params,
+            second_lambda_params,
             params["d_L"],
             0,
             params["phase_c"],
             params["iota"],
         ]
-        hp, hc = gen_NRTidalv2_hphc(frequency, theta, self.f_ref)
+        hp, hc = gen_NRTidalv2_hphc(frequency, theta, self.f_ref, use_lambda_tildes=use_lambda_tildes)
         output["p"] = hp
         output["c"] = hc
         return output

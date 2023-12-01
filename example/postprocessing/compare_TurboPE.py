@@ -111,7 +111,10 @@ for which in which_list:
         print(np.shape(chains))
     
     # TurboPE samples
-    flowMC_chains, _ = get_chains('GW170817')
+    if "GW150914" in outdir:
+        flowMC_chains, _ = get_chains('GW150914')
+    else:
+        flowMC_chains, _ = get_chains('GW170817')
     print("Loading complete")
 
     # Reweight based on distance
