@@ -215,6 +215,9 @@ mass_matrix = mass_matrix.at[12,12].set(1e-2)
 local_sampler_arg = {"step_size": mass_matrix * eps}
 
 hyperparameters["outdir_name"] = outdir
+hyperparameters["local_sampler_arg"] = local_sampler_arg
+hyperparameters["n_loops_training"] = 5
+hyperparameters["n_loops_production"] = 5
 
 jim = Jim(
     likelihood,

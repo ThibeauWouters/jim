@@ -48,7 +48,7 @@ labels = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$\Lambda$', r'$\
 labels_chi_eff = [r'$M_c/M_\odot$', r'$q$', r'$\chi_{\rm eff}$', r'$\tilde{\Lambda}$', r'$\delta\tilde{\Lambda}$' ,r'$d_{\rm{L}}/{\rm Mpc}$',
                r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
 
-gwosc_names = ['chirp_mass', 'mass_ratio', 'chi_eff', 'lambda_tilde', 'delta_lambda', 'luminosity_distance', 'phase', 'psi', 'iota', 'ra', 'dec']
+gwosc_names = ['chirp_mass', 'mass_ratio', 'chi_eff', 'lambda_tilde', 'delta_lambda', 'luminosity_distance', 'phase', 'iota', 'psi', 'ra', 'dec']
 
 use_lambdas = False
 if use_lambdas:
@@ -57,7 +57,7 @@ if use_lambdas:
     gwosc_names[lambda_tilde_idx] = 'lambda_1'
     gwosc_names[delta_lambda_idx] = 'lambda_2'
 
-def get_chains_GWOSC(filename: str = "posterior_samples.h5", key: str = "PhenomPNRT"):
+def get_chains_GWOSC(filename: str = "posterior_samples.h5", key: str = "TaylorF2"):
     """
     Retrieve posterior samples of an event
     """
@@ -121,7 +121,7 @@ idx_list = [0,1,2,3,4,5,6,8,9,10,11,12]
 
 ### Plotting hyperparameters
 
-use_weights = False
+use_weights = True
 use_d_L_quantile = False
 use_chi_eff = True
 

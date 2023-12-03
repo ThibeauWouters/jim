@@ -70,7 +70,7 @@ class FisherInformationMatrix:
             # Initialize a new Fisher matrix for this detector
             this_fisher_information_matrix = jnp.zeros((n_dim, n_dim))
             # Get gradient of function that gives the waveform in this detector
-            fn = lambda x: detector._get_h_detector(frequencies, waveform_generator, x)
+            fn = lambda x: detector._get_h_detector(frequencies, waveform_generator, x) * jnp.exp(-1j * 2 * jnp.pi * frequencies * x["t_c"])
             dh_dlambda_func = jax.jacfwd(fn)
             # Evaluate the derivatives at the given point
             dh_dlambda = dh_dlambda_func(params)
@@ -103,9 +103,9 @@ class FisherInformationMatrix:
         # Clip so that it all scales are below 1 
         mass_matrix_diagonal = jnp.clip(mass_matrix_diagonal, 0, 1)
         
-        # TODO override values should be done more informed?
-        idx = naming.index("t_c") # t_c is uninformed, set to default value instead
-        mass_matrix_diagonal = mass_matrix_diagonal.at[idx].set(1e-5)
+        # # TODO OK now?
+        # idx = naming.index("t_c") # t_c is uninformed, set to default value instead
+        # mass_matrix_diagonal = mass_matrix_diagonal.at[idx].set(1e-5)
         
         # Finally, convert from diagonal to matrix
         mass_matrix = jnp.diag(mass_matrix_diagonal)

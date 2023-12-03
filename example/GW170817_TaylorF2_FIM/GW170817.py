@@ -97,22 +97,27 @@ V1_frequency = V1_frequency[(V1_frequency>minimum_frequency)*(V1_frequency<maxim
 
 ### Getting ifos and overwriting with above data
 
-H1.load_data(gps, post_trigger_duration, post_trigger_duration, fmin, fmax, psd_pad=16, tukey_alpha=0.2)
-L1.load_data(gps, post_trigger_duration, post_trigger_duration, fmin, fmax, psd_pad=16, tukey_alpha=0.2)
-V1.load_data(gps, post_trigger_duration, post_trigger_duration, fmin, fmax, psd_pad=16, tukey_alpha=0.2)
+H1.load_data(gps, duration+post_trigger_duration, post_trigger_duration, fmin, fmax, psd_pad=16, tukey_alpha=0.015625)
+L1.load_data(gps, duration+post_trigger_duration, post_trigger_duration, fmin, fmax, psd_pad=16, tukey_alpha=0.015625)
+V1.load_data(gps, duration+post_trigger_duration, post_trigger_duration, fmin, fmax, psd_pad=16, tukey_alpha=0.015625)
 
 # Overwrite results
-H1.frequencies = H1_frequency
-H1.data = H1_data
-H1.psd = H1_psd 
+# H1.frequencies = H1_frequency
+# H1.data = H1_data
+# H1.psd = H1_psd 
 
-L1.frequencies = L1_frequency
-L1.data = L1_data
-L1.psd = L1_psd 
+# L1.frequencies = L1_frequency
+# L1.data = L1_data
+# L1.psd = L1_psd 
 
-V1.frequencies = V1_frequency
-V1.data = V1_data
-V1.psd = V1_psd 
+# V1.frequencies = V1_frequency
+# V1.data = V1_data
+# V1.psd = V1_psd 
+
+### Overwrite the PSDs with the ones from the data
+H1.load_psd_from_file('../../data/GW170817-IMRD_data0_1187008882-43_generation_data_dump.pickle_H1_psd.txt')
+L1.load_psd_from_file('../../data/GW170817-IMRD_data0_1187008882-43_generation_data_dump.pickle_L1_psd.txt')
+V1.load_psd_from_file('../../data/GW170817-IMRD_data0_1187008882-43_generation_data_dump.pickle_V1_psd.txt')
     
 # Prior
 prior = Uniform(
