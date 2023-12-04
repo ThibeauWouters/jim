@@ -48,13 +48,8 @@ params = {
 }
 plt.rcParams.update(params)
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '2,3'
 
-# Choose the desired GPU device -- useful in case there are multiple in use
-chosen_device = jax.devices()[2]
-jax.config.update("jax_platform_name", "gpu")
-jax.config.update("jax_default_device", chosen_device)
-
+load_online_data = False
 labels = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$\Lambda$', r'$\delta\Lambda$', r'$d_{\rm{L}}/{\rm Mpc}$',
                r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
 
@@ -103,33 +98,34 @@ V1_frequency = V1_frequency[(V1_frequency>minimum_frequency)*(V1_frequency<maxim
 
 ### Getting ifos and overwriting with above data
 
-tukey_alpha = 2 / (duration / 2)
+if load_online_data:
+    tukey_alpha = 2 / (duration / 2)
 
-H1.load_data(gps, duration, 2, fmin, fmax, psd_pad=16, tukey_alpha=tukey_alpha)
-L1.load_data(gps, duration, 2, fmin, fmax, psd_pad=16, tukey_alpha=tukey_alpha)
-V1.load_data(gps, duration, 2, fmin, fmax, psd_pad=16, tukey_alpha=tukey_alpha)
+    H1.load_data(gps, duration, 2, fmin, fmax, psd_pad=16, tukey_alpha=tukey_alpha)
+    L1.load_data(gps, duration, 2, fmin, fmax, psd_pad=16, tukey_alpha=tukey_alpha)
+    V1.load_data(gps, duration, 2, fmin, fmax, psd_pad=16, tukey_alpha=tukey_alpha)
 
-### TODO Overwrite results only if desired
-# H1.frequencies = H1_frequency
-# H1.data = H1_data
-# H1.psd = H1_psd 
+    H1.load_psd_from_file('../../data/GW170817-IMRD_data0_1187008882-43_generation_data_dump.pickle_H1_psd.txt')
+    L1.load_psd_from_file('../../data/GW170817-IMRD_data0_1187008882-43_generation_data_dump.pickle_L1_psd.txt')
+    V1.load_psd_from_file('../../data/GW170817-IMRD_data0_1187008882-43_generation_data_dump.pickle_V1_psd.txt')
 
-# L1.frequencies = L1_frequency
-# L1.data = L1_data
-# L1.psd = L1_psd 
+else:
+    H1.frequencies = H1_frequency
+    H1.data = H1_data
+    H1.psd = H1_psd 
 
-# V1.frequencies = V1_frequency
-# V1.data = V1_data
-# V1.psd = V1_psd 
+    L1.frequencies = L1_frequency
+    L1.data = L1_data
+    L1.psd = L1_psd 
 
-H1.load_psd_from_file('../../data/GW170817-IMRD_data0_1187008882-43_generation_data_dump.pickle_H1_psd.txt')
-L1.load_psd_from_file('../../data/GW170817-IMRD_data0_1187008882-43_generation_data_dump.pickle_L1_psd.txt')
-V1.load_psd_from_file('../../data/GW170817-IMRD_data0_1187008882-43_generation_data_dump.pickle_V1_psd.txt')
+    V1.frequencies = V1_frequency
+    V1.data = V1_data
+    V1.psd = V1_psd 
 
 # Prior
 prior = Uniform(
-    xmin=[1.18, 0.125, -0.05, -0.05,    0.0, -500.0,  1.0, -0.1,        0.0, -1.0,    0.0,        0.0, -1],
-    xmax=[1.21,   1.0,  0.05,  0.05, 3000.0,  500.0, 75.0,  0.1, 2 * jnp.pi,  1.0, jnp.pi, 2 * jnp.pi,  1],
+    xmin=[1.18, 0.125, -0.05, -0.05,    0.0, -500.0,  1.0, -0.1,        0.0, -1.0,    0.0,        0.0, -1.0],
+    xmax=[1.21,   1.0,  0.05,  0.05, 3000.0,  500.0, 75.0,  0.1, 2 * jnp.pi,  1.0, jnp.pi, 2 * jnp.pi,  1.0],
     naming=[
         "M_c",
         "q",

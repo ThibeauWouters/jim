@@ -1,7 +1,7 @@
 from jaxtyping import Array
 import jax
 import jax.numpy as jnp
-from flowMC.sampler.flowHMC import flowHMC
+#from flowMC.sampler.flowHMC import flowHMC
 
 
 from flowMC.sampler.Sampler import Sampler
@@ -11,14 +11,13 @@ from flowMC.nfmodel.mlp import MLP
 from flowMC.utils.EvolutionaryOptimizer import EvolutionaryOptimizer
 from flowMC.utils.PRNG_keys import initialize_rng_keys
 
-
-
 from jimgw.prior import Prior
 from jimgw.likelihood import LikelihoodBase
 from jimgw.hyperparameters import jim_default_hyperparameters
 
 import numpy as np
 
+# TODO merge with flowMC
 class Jim(object):
     """
     Master class for interfacing with flowMC
