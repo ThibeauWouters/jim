@@ -324,6 +324,7 @@ class GroundBased2G(Detector):
     
     def load_psd_from_file(self, psd_file: str) -> None:
         # TODO need to have frequencies for this to work
+        print(f"Loading PSD for {self.name} from PSD file {psd_file}.")
         f, psd_vals = np.genfromtxt(psd_file).T
         psd = interp1d(f, psd_vals, fill_value=(psd_vals[0], psd_vals[-1]))(self.frequencies)
         self.psd = psd

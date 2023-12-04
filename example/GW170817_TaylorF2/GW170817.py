@@ -55,8 +55,6 @@ chosen_device = jax.devices()[2]
 jax.config.update("jax_platform_name", "gpu")
 jax.config.update("jax_default_device", chosen_device)
 
-
-
 labels = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$\Lambda$', r'$\delta\Lambda$', r'$d_{\rm{L}}/{\rm Mpc}$',
                r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
 
@@ -105,22 +103,28 @@ V1_frequency = V1_frequency[(V1_frequency>minimum_frequency)*(V1_frequency<maxim
 
 ### Getting ifos and overwriting with above data
 
-H1.load_data(gps, post_trigger_duration, post_trigger_duration, fmin, fmax, psd_pad=16, tukey_alpha=0.2)
-L1.load_data(gps, post_trigger_duration, post_trigger_duration, fmin, fmax, psd_pad=16, tukey_alpha=0.2)
-V1.load_data(gps, post_trigger_duration, post_trigger_duration, fmin, fmax, psd_pad=16, tukey_alpha=0.2)
+tukey_alpha = 2 / (duration / 2)
 
-# Overwrite results
-H1.frequencies = H1_frequency
-H1.data = H1_data
-H1.psd = H1_psd 
+H1.load_data(gps, duration, 2, fmin, fmax, psd_pad=16, tukey_alpha=tukey_alpha)
+L1.load_data(gps, duration, 2, fmin, fmax, psd_pad=16, tukey_alpha=tukey_alpha)
+V1.load_data(gps, duration, 2, fmin, fmax, psd_pad=16, tukey_alpha=tukey_alpha)
 
-L1.frequencies = L1_frequency
-L1.data = L1_data
-L1.psd = L1_psd 
+### TODO Overwrite results only if desired
+# H1.frequencies = H1_frequency
+# H1.data = H1_data
+# H1.psd = H1_psd 
 
-V1.frequencies = V1_frequency
-V1.data = V1_data
-V1.psd = V1_psd 
+# L1.frequencies = L1_frequency
+# L1.data = L1_data
+# L1.psd = L1_psd 
+
+# V1.frequencies = V1_frequency
+# V1.data = V1_data
+# V1.psd = V1_psd 
+
+H1.load_psd_from_file('../../data/GW170817-IMRD_data0_1187008882-43_generation_data_dump.pickle_H1_psd.txt')
+L1.load_psd_from_file('../../data/GW170817-IMRD_data0_1187008882-43_generation_data_dump.pickle_L1_psd.txt')
+V1.load_psd_from_file('../../data/GW170817-IMRD_data0_1187008882-43_generation_data_dump.pickle_V1_psd.txt')
 
 # Prior
 prior = Uniform(
@@ -148,28 +152,10 @@ prior = Uniform(
 
 ### Create likelihood object
 
-
-# TODO get the parameters here!
-
-ref_params = {'M_c': 1.19754835, 
-              'eta': 0.24211905, 
-              's1_z': 0.04992184, 
-              's2_z': -0.0375549, 
-              'lambda_tilde': 236.19042388, 
-              'delta_lambda_tilde': 95.33493973, 
-              'd_L': 19.27281561, 
-              't_c': 0.0326196, 
-              'phase_c': 4.43696823, 
-              'iota': 1.73586993, 
-              'psi': 2.04194889, 
-              'ra': 1.72313012, 
-              'dec': 0.72667927
-}
-
-# TODO change back to HeterodynedTransientLikelihoodFD
+# TODO update the reference parameters after a run has finished
+ref_params = None
 
 likelihood = HeterodynedTransientLikelihoodFD([H1, L1, V1], prior=prior, bounds=[prior.xmin, prior.xmax], waveform=RippleTaylorF2(), trigger_time=gps, duration=T, n_bins=500, ref_params=ref_params)
-# likelihood = TransientLikelihoodFD([H1, L1, V1], waveform=RippleTaylorF2(), trigger_time=gps, duration=T)
 
 ### Create sampler and jim objects
 

@@ -1,37 +1,37 @@
 Training summary
 ==========
-M_c: 1.487 +/- 0.000
-q: 0.855 +/- 0.097
-s1_z: 0.019 +/- 0.021
-s2_z: 0.014 +/- 0.023
-lambda_tilde: 527.008 +/- 273.362
-delta_lambda_tilde: 13.520 +/- 147.026
-d_L: 141.647 +/- 52.012
-t_c: -0.000 +/- 0.018
-phase_c: 3.098 +/- 1.797
-cos_iota: 0.103 +/- 0.650
-psi: 1.557 +/- 0.906
-ra: 2.442 +/- 1.605
-sin_dec: -0.072 +/- 0.501
-Log probability: 57.492 +/- 1751.383
-Local acceptance: 0.943 +/- 0.233
-Global acceptance: 0.076 +/- 0.265
-Max loss: 22.821, Min loss: 4.780
+M_c: 1.487 +/- 0.001
+q: 0.832 +/- 0.111
+s1_z: 0.014 +/- 0.021
+s2_z: 0.013 +/- 0.022
+lambda_tilde: 649.840 +/- 281.452
+delta_lambda_tilde: 21.766 +/- 151.720
+d_L: 179.864 +/- 72.867
+t_c: -0.003 +/- 0.019
+phase_c: 3.438 +/- 1.706
+cos_iota: -0.023 +/- 0.677
+psi: 1.739 +/- 0.799
+ra: 2.320 +/- 1.579
+sin_dec: -0.083 +/- 0.497
+Log probability: 41.665 +/- 2552.622
+Local acceptance: 0.964 +/- 0.185
+Global acceptance: 0.032 +/- 0.176
+Max loss: 22.821, Min loss: 4.657
 Production summary
 ==========
 M_c: 1.487 +/- 0.000
-q: 0.857 +/- 0.093
-s1_z: 0.019 +/- 0.021
-s2_z: 0.014 +/- 0.023
-lambda_tilde: 501.783 +/- 263.499
-delta_lambda_tilde: 13.183 +/- 142.464
-d_L: 135.441 +/- 45.908
-t_c: 0.000 +/- 0.018
-phase_c: 3.106 +/- 1.803
-cos_iota: 0.101 +/- 0.646
-psi: 1.557 +/- 0.909
-ra: 2.480 +/- 1.606
-sin_dec: -0.069 +/- 0.500
-Log probability: 63.226 +/- 2.325
-Local acceptance: 0.935 +/- 0.246
-Global acceptance: 0.144 +/- 0.351
+q: 0.854 +/- 0.088
+s1_z: 0.020 +/- 0.019
+s2_z: 0.015 +/- 0.021
+lambda_tilde: 512.100 +/- 242.318
+delta_lambda_tilde: 14.936 +/- 131.446
+d_L: 144.713 +/- 41.732
+t_c: -0.001 +/- 0.018
+phase_c: 3.284 +/- 1.737
+cos_iota: 0.079 +/- 0.669
+psi: 1.633 +/- 0.849
+ra: 2.420 +/- 1.543
+sin_dec: -0.068 +/- 0.461
+Log probability: 63.332 +/- 2.259
+Local acceptance: 0.968 +/- 0.177
+Global acceptance: 0.083 +/- 0.277
