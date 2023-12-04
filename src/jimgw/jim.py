@@ -1,6 +1,8 @@
 from jaxtyping import Array
 import jax
 import jax.numpy as jnp
+from flowMC.sampler.flowHMC import flowHMC
+
 
 from flowMC.sampler.Sampler import Sampler
 from flowMC.sampler.MALA import MALA
@@ -60,6 +62,7 @@ class Jim(object):
             None,
             local_sampler,
             model,
+            global_sampler = model,
             **kwargs)
         
         # TODO move this if OK
@@ -84,7 +87,7 @@ class Jim(object):
         print("Done compiling")
 
         print("Starting the optimizer")
-        optimizer = EvolutionaryOptimizer(self.Prior.n_dim, verbose = True)
+        optimizer = EvolutionaryOptimizer(self.Prior.n_dim, verbose=True)
         state = optimizer.optimize(y, bounds, n_loops=n_loops)
         best_fit_params = optimizer.get_result()[0]
         # Save best fit params to jim object
@@ -92,13 +95,15 @@ class Jim(object):
         return best_fit_params
     
     def posterior(self, params: Array, data: dict):
-        named_params = self.Prior.add_name(params, transform_name=True, transform_value=True)
-        return self.Likelihood.evaluate(named_params, data) + self.Prior.log_prob(params)
+        prior_params = self.Prior.add_name(params.T)
+        prior  = self.Prior.log_prob(prior_params)
+        return self.Likelihood.evaluate(self.Prior.transform(prior_params), data) + prior
 
     def sample(self, key: jax.random.PRNGKey,
                initial_guess: Array = None):
         if initial_guess is None:
             initial_guess = self.Prior.sample(key, self.Sampler.n_chains)
+            initial_guess = jnp.stack([i for i in initial_guess.values()]).T
         self.Sampler.sample(initial_guess, None)
 
     def print_summary(self, save: bool=True) -> None:
@@ -167,18 +172,23 @@ class Jim(object):
         """
         Get the samples from the sampler
 
-        Args:
-            training (bool, optional): If True, return the training samples. Defaults to False.
+        Parameters
+        ----------
+        training : bool, optional
+            Whether to get the training samples or the production samples, by default False
 
-        Returns:
-            Array: Samples
+        Returns
+        -------
+        dict
+            Dictionary of samples
+
         """
         if training:
             chains = self.Sampler.get_sampler_state("training")["chains"]
         else:
             chains = self.Sampler.get_sampler_state("production")["chains"]
 
-        chains = self.Prior.add_name(chains.transpose(2,0,1), transform_name=True)
+        chains = self.Prior.add_name(chains.transpose(2, 0, 1), transform_name=True)
         return chains
     
     def save_hyperparameters(self):
