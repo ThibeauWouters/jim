@@ -86,16 +86,17 @@ def reweigh_distance(chains, d_idx = 4):
 
 which_list = ["production", "NF"]
 outdir = "../GW150914/outdir/"
+outdir = '/home/thibeau.wouters/projects/G441735/runs/G441735_TaylorF2_no_tidal/outdir/'
 corner_kwargs = default_corner_kwargs
 
 use_weights = True
-plot_turboPE = True
+plot_turboPE = False
 
 for which in which_list:
     corner_kwargs["color"] = "blue"
     filename = f"{outdir}results_{which}.npz"
 
-    print(f"Loading {which} samples...")
+    print(f"Loading {which} samples from {outdir}...")
     # My samples
     if which == "production":
         data = np.load(filename)
@@ -123,10 +124,10 @@ for which in which_list:
     ### Plot
     
     if use_weights:
-        name = f"comparison_TurboPE_{which}_reweighted.png"
+        name = f"postprocessing_{which}_reweighted.png"
     
     if not use_weights:
-        name = f"comparison_TurboPE_{which}.png"
+        name = f"postprocessing_{which}.png"
         weights = None
     
     print(f"Saving plot of chains to {outdir + name}")
