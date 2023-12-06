@@ -88,6 +88,7 @@ prior = Composite(
 
 bounds = jnp.array([[10.0, 80.0], [0.125, 1.0], [-1.0, 1.0], [-1.0, 1.0], [0.0, 2000.0], [-0.05, 0.05], [0.0, 2 * jnp.pi], [-1.0, 1.0], [0.0, jnp.pi], [0.0, 2 * jnp.pi], [-1.0, 1.0]]).T
 
+
 likelihood = HeterodynedTransientLikelihoodFD(
     [H1, L1],
     prior=prior,

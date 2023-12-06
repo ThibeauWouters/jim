@@ -3,7 +3,7 @@ from jimgw.jim import Jim
 from jimgw.detector import H1, L1, V1
 from jimgw.likelihood import HeterodynedTransientLikelihoodFD, TransientLikelihoodFD
 from jimgw.waveform import RippleIMRPhenomD, RippleTaylorF2
-from jimgw.prior import Uniform
+from jimgw.prior import Uniform, Powerlaw, Composite 
 # ripple
 # flowmc
 from flowMC.utils.PRNG_keys import initialize_rng_keys
@@ -130,15 +130,16 @@ q_prior = Uniform(
     naming=["q"],
     transforms={"q": ("eta", lambda params: params["q"] / (1 + params["q"]) ** 2)},
 )
-s1z_prior = Uniform(-0.05, 0.05, naming=["s1_z"])
-s2z_prior = Uniform(-0.05, 0.05, naming=["s2_z"])
-lambda_tilde_prior = Uniform(0.0, 3000.0, naming=["lambda_tilde"])
+s1z_prior                = Uniform(-0.05, 0.05, naming=["s1_z"])
+s2z_prior                = Uniform(-0.05, 0.05, naming=["s2_z"])
+lambda_tilde_prior       = Uniform(0.0, 3000.0, naming=["lambda_tilde"])
 delta_lambda_tilde_prior = Uniform(-500.0, 500.0, naming=["delta_lambda_tilde"])
-dL_prior = Uniform(0.0, 75.0, naming=["d_L"])
 
 # External parameters
-t_c_prior = Uniform(-0.1, 0.1, naming=["t_c"])
-phase_c_prior = Uniform(0.0, 2 * jnp.pi, naming=["phase_c"])
+# dL_prior       = Uniform(0.0, 75.0, naming=["d_L"])
+dL_prior       = Powerlaw(1.0, 75.0, 2.0, naming=["d_L"])
+t_c_prior      = Uniform(-0.1, 0.1, naming=["t_c"])
+phase_c_prior  = Uniform(0.0, 2 * jnp.pi, naming=["phase_c"])
 cos_iota_prior = Uniform(
     -1.0,
     1.0,
@@ -152,8 +153,8 @@ cos_iota_prior = Uniform(
         )
     },
 )
-psi_prior = Uniform(0.0, jnp.pi, naming=["psi"])
-ra_prior = Uniform(0.0, 2 * jnp.pi, naming=["ra"])
+psi_prior     = Uniform(0.0, jnp.pi, naming=["psi"])
+ra_prior      = Uniform(0.0, 2 * jnp.pi, naming=["ra"])
 sin_dec_prior = Uniform(
     -1.0,
     1.0,
@@ -168,35 +169,37 @@ sin_dec_prior = Uniform(
     },
 )
 
-prior = Uniform(
-    xmin=[1.18, 0.125, -0.05, -0.05,    0.0, -500.0,  1.0, -0.1,        0.0, -1.0,    0.0,        0.0, -1.0],
-    xmax=[1.21,   1.0,  0.05,  0.05, 3000.0,  500.0, 75.0,  0.1, 2 * jnp.pi,  1.0, jnp.pi, 2 * jnp.pi,  1.0],
-    naming=[
-        "M_c",
-        "q",
-        "s1_z", 
-        "s2_z", 
-        "lambda_tilde",
-        "delta_lambda_tilde",
-        "d_L",
-        "t_c",
-        "phase_c",
-        "cos_iota",
-        "psi",
-        "ra",
-        "sin_dec",
-    ],
-    transforms = {"q": ("eta", lambda params: params['q']/(1+params['q'])**2),
-                 "cos_iota": ("iota",lambda params: jnp.arccos(jnp.arcsin(jnp.sin(params['cos_iota']/2*jnp.pi))*2/jnp.pi)),
-                 "sin_dec": ("dec",lambda params: jnp.arcsin(jnp.arcsin(jnp.sin(params['sin_dec']/2*jnp.pi))*2/jnp.pi))}
+prior = Composite([
+        Mc_prior,
+        q_prior,
+        s1z_prior,
+        s2z_prior,
+        lambda_tilde_prior,
+        delta_lambda_tilde_prior,
+        dL_prior,
+        t_c_prior,
+        phase_c_prior,
+        cos_iota_prior,
+        psi_prior,
+        ra_prior,
+        sin_dec_prior,
+    ]
 )
+
+# The following only works if every prior has xmin and xmax property, which is OK for Uniform and Powerlaw
+bounds = jnp.array([[p.xmin, p.xmax] for p in prior.priors]).T
+
+print("bounds: ")
+print(bounds)
+print("bounds: shape ")
+print(jnp.shape(bounds))
 
 ### Create likelihood object
 
 # TODO update the reference parameters after a run has finished
 ref_params = None
 
-likelihood = HeterodynedTransientLikelihoodFD([H1, L1, V1], prior=prior, bounds=[prior.xmin, prior.xmax], waveform=RippleTaylorF2(), trigger_time=gps, duration=T, n_bins=500, ref_params=ref_params)
+likelihood = HeterodynedTransientLikelihoodFD([H1, L1, V1], prior=prior, bounds=bounds, waveform=RippleTaylorF2(), trigger_time=gps, duration=T, n_bins=500, ref_params=ref_params)
 
 ### Create sampler and jim objects
 
@@ -235,8 +238,6 @@ jim = Jim(
     keep_quantile=0.0,
     train_thinning=10,
     output_thinning=30,    
-    # num_layers = 6,
-    # hidden_size = [32,32],
     n_loops_maximize_likelihood = 2000,
     local_sampler_arg=local_sampler_arg,
     outdir_name=outdir_name

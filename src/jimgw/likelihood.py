@@ -182,6 +182,10 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         self.freq_grid_low = freq_grid[:-1]
 
         print("Finding reference parameters..")
+        
+        # Check if shape of bounds is correct, otherwise, transpose bounds
+        if jnp.shape(bounds)[0] != 2:
+            bounds = bounds.T
 
         self.ref_params = self.maximize_likelihood(
             bounds=bounds, prior=prior, popsize=popsize, n_loops=n_loops
@@ -479,11 +483,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         y = jax.jit(jax.vmap(y))
 
         print("Starting the optimizer")
-        optimizer = EvolutionaryOptimizer(len(bounds), verbose=True, popsize=popsize, which_ES=which_ES)
+        optimizer = EvolutionaryOptimizer(len(bounds), popsize=popsize, verbose=True)
         state = optimizer.optimize(y, bounds, n_loops=n_loops)
         best_fit = optimizer.get_result()[0]
-        self.best_fit_params = best_fit
-        best_member, best_result = optimizer.get_result()
-        self.best_member = best_member # TODO remove afterwards!!!
-        self.best_result = best_result
-        return prior.add_name(best_fit, transform_name=True, transform_value=True)
+        return prior.transform(prior.add_name(best_fit))
