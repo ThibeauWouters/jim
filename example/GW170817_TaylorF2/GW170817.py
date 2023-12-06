@@ -67,8 +67,6 @@ duration = T
 post_trigger_duration = 2
 epoch = duration - post_trigger_duration
 f_ref = fmin 
-# gmst = GreenwichMeanSiderealTime(trigger_time)
-# gsmt = Time(trigger_time, format="gps").sidereal_time("apparent", "greenwich").rad
 
 ### Getting detector data
 
@@ -122,7 +120,54 @@ else:
     V1.data = V1_data
     V1.psd = V1_psd 
 
-# Prior
+### Define priors
+
+# Internal parameters
+Mc_prior = Uniform(1.18, 1.21, naming=["M_c"])
+q_prior = Uniform(
+    0.125,
+    1.0,
+    naming=["q"],
+    transforms={"q": ("eta", lambda params: params["q"] / (1 + params["q"]) ** 2)},
+)
+s1z_prior = Uniform(-0.05, 0.05, naming=["s1_z"])
+s2z_prior = Uniform(-0.05, 0.05, naming=["s2_z"])
+lambda_tilde_prior = Uniform(0.0, 3000.0, naming=["lambda_tilde"])
+delta_lambda_tilde_prior = Uniform(-500.0, 500.0, naming=["delta_lambda_tilde"])
+dL_prior = Uniform(0.0, 75.0, naming=["d_L"])
+
+# External parameters
+t_c_prior = Uniform(-0.1, 0.1, naming=["t_c"])
+phase_c_prior = Uniform(0.0, 2 * jnp.pi, naming=["phase_c"])
+cos_iota_prior = Uniform(
+    -1.0,
+    1.0,
+    naming=["cos_iota"],
+    transforms={
+        "cos_iota": (
+            "iota",
+            lambda params: jnp.arccos(
+                jnp.arcsin(jnp.sin(params["cos_iota"] / 2 * jnp.pi)) * 2 / jnp.pi
+            ),
+        )
+    },
+)
+psi_prior = Uniform(0.0, jnp.pi, naming=["psi"])
+ra_prior = Uniform(0.0, 2 * jnp.pi, naming=["ra"])
+sin_dec_prior = Uniform(
+    -1.0,
+    1.0,
+    naming=["sin_dec"],
+    transforms={
+        "sin_dec": (
+            "dec",
+            lambda params: jnp.arcsin(
+                jnp.arcsin(jnp.sin(params["sin_dec"] / 2 * jnp.pi)) * 2 / jnp.pi
+            ),
+        )
+    },
+)
+
 prior = Uniform(
     xmin=[1.18, 0.125, -0.05, -0.05,    0.0, -500.0,  1.0, -0.1,        0.0, -1.0,    0.0,        0.0, -1.0],
     xmax=[1.21,   1.0,  0.05,  0.05, 3000.0,  500.0, 75.0,  0.1, 2 * jnp.pi,  1.0, jnp.pi, 2 * jnp.pi,  1.0],
