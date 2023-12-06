@@ -189,15 +189,24 @@ prior = Composite([
 # The following only works if every prior has xmin and xmax property, which is OK for Uniform and Powerlaw
 bounds = jnp.array([[p.xmin, p.xmax] for p in prior.priors]).T
 
-print("bounds: ")
-print(bounds)
-print("bounds: shape ")
-print(jnp.shape(bounds))
-
 ### Create likelihood object
 
-# TODO update the reference parameters after a run has finished
-ref_params = None
+ref_params = {
+    'M_c': 1.19754835,
+    'eta': 0.24211905,
+    's1_z': 0.04992184,
+    's2_z': -0.0375549,
+    'lambda_tilde': 236.19042388,
+    'delta_lambda_tilde': 95.33493973,
+    'd_L': 19.27281561,
+    't_c': 0.0326196,
+    'phase_c': 4.43696823,
+    'iota': 1.73586993,
+    'psi': 2.04194889,
+    'ra': 1.72313012,
+    'dec': 0.72667927
+}
+
 
 likelihood = HeterodynedTransientLikelihoodFD([H1, L1, V1], prior=prior, bounds=bounds, waveform=RippleTaylorF2(), trigger_time=gps, duration=T, n_bins=500, ref_params=ref_params)
 
@@ -265,7 +274,6 @@ jim.print_summary()
 
 ### Diagnosis plots of summaries
 print("Creating plots")
-jim.Sampler.plot_summary("pretraining")
 jim.Sampler.plot_summary("training")
 jim.Sampler.plot_summary("production")
 

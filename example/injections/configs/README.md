@@ -1,1 +1,0 @@
-This is an old directory, still there from the old version of jim. Unused in this fork of jim.
