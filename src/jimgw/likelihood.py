@@ -139,22 +139,20 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
     B0_array: dict[Array]  # B0 array for the likelihood, keyed by detector name
     B1_array: dict[Array]  # B1 array for the likelihood, keyed by detector name
 
-    # TODO get n_bins, n_walkers and n_loops as hyperparams?
-
     def __init__(
         self,
         detectors: list[Detector],
         waveform: Waveform,
         prior: Prior,
-        bounds: tuple[Array, Array],
+        bounds: Float[Array, " n_dim 2"],
         n_bins: int = 100,
         trigger_time: float = 0,
         duration: float = 4,
         post_trigger_duration: float = 2,
         popsize: int = 100,
         n_loops: int = 2000,
-        ref_params: Array = None,
-        which_ES: str = "CMA_ES"
+        ref_params: dict = None,
+        which_ES: str = "CMA_ES" # TODO add option to choose the ES?
     ) -> None:
         super().__init__(
             detectors, waveform, trigger_time, duration, post_trigger_duration
@@ -181,18 +179,25 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         )
         self.freq_grid_low = freq_grid[:-1]
 
-        print("Finding reference parameters..")
+        # Check if reference parameters are provided, otherwise, find them
+        if ref_params is not None:
+            self.ref_params = ref_params
+            print("Reference parameters provided:")
+            print(self.ref_params)  
         
-        # Check if shape of bounds is correct, otherwise, transpose bounds
-        if jnp.shape(bounds)[0] != 2:
-            bounds = bounds.T
+        else:
+            print("Finding reference parameters..")
+        
+            # Check if shape of bounds is correct, otherwise, transpose bounds
+            if jnp.shape(bounds)[0] != 2:
+                bounds = bounds.T
 
-        self.ref_params = self.maximize_likelihood(
-            bounds=bounds, prior=prior, popsize=popsize, n_loops=n_loops
-        )
+            self.ref_params = self.maximize_likelihood(
+                bounds=bounds, prior=prior, popsize=popsize, n_loops=n_loops
+            )
         
-        print("Done finding reference parameters:")
-        print(self.ref_params)
+            print("Done finding reference parameters. Result:")
+            print(self.ref_params)
 
         print("Constructing reference waveforms..")
 
