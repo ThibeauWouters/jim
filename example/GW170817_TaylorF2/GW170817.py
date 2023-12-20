@@ -10,10 +10,12 @@ from flowMC.utils.PRNG_keys import initialize_rng_keys
 # jax
 import jax.numpy as jnp
 import jax
+chosen_device = jax.devices()[2] # e.g. device with index 2
+jax.config.update("jax_platform_name", "gpu")
+jax.config.update("jax_default_device", chosen_device)
 # others
 import time
 import numpy as np
-from lal import GreenwichMeanSiderealTime
 jax.config.update("jax_enable_x64", True)
 from astropy.time import Time
 
@@ -191,29 +193,17 @@ bounds = jnp.array([[p.xmin, p.xmax] for p in prior.priors]).T
 
 ### Create likelihood object
 
-ref_params = {
-    'M_c': 1.19754835,
-    'eta': 0.24211905,
-    's1_z': 0.04992184,
-    's2_z': -0.0375549,
-    'lambda_tilde': 236.19042388,
-    'delta_lambda_tilde': 95.33493973,
-    'd_L': 19.27281561,
-    't_c': 0.0326196,
-    'phase_c': 4.43696823,
-    'iota': 1.73586993,
-    'psi': 2.04194889,
-    'ra': 1.72313012,
-    'dec': 0.72667927
-}
+# TODO put the reference parameters here?
+ref_params = None
 
+# NOTE I am checking whether 100 bins also gives fine results or not
+n_bins = 100
+likelihood = HeterodynedTransientLikelihoodFD([H1, L1, V1], prior=prior, bounds=bounds, waveform=RippleTaylorF2(), trigger_time=gps, duration=T, n_bins=n_bins, ref_params=ref_params)
 
-likelihood = HeterodynedTransientLikelihoodFD([H1, L1, V1], prior=prior, bounds=bounds, waveform=RippleTaylorF2(), trigger_time=gps, duration=T, n_bins=500, ref_params=ref_params)
+print("Running with n_bins  = ", n_bins)
 
 ### Create sampler and jim objects
 
-# Mass matrix (this is copy pasted from the TurboPE set up)
-# TODO get automated mass matrix, or make sure this doesn't break things
 eps = 1e-3
 n_chains = 1000
 n_dim = 13
