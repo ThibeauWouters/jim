@@ -3,18 +3,19 @@ from jimgw.jim import Jim
 from jimgw.detector import H1, L1, V1
 from jimgw.likelihood import HeterodynedTransientLikelihoodFD, TransientLikelihoodFD
 from jimgw.waveform import RippleIMRPhenomD_NRTidalv2
-from jimgw.prior import Uniform
-from jimgw.fisher_information_matrix import FisherInformationMatrix
+from jimgw.prior import Uniform, Powerlaw, Composite 
 # ripple
 # flowmc
 from flowMC.utils.PRNG_keys import initialize_rng_keys
 # jax
 import jax.numpy as jnp
 import jax
+chosen_device = jax.devices()[1] # e.g. device with index 2
+jax.config.update("jax_platform_name", "gpu")
+jax.config.update("jax_default_device", chosen_device)
 # others
 import time
 import numpy as np
-from lal import GreenwichMeanSiderealTime
 jax.config.update("jax_enable_x64", True)
 from astropy.time import Time
 
@@ -32,6 +33,8 @@ default_corner_kwargs = dict(bins=40,
                         label_kwargs=dict(fontsize=16),
                         title_kwargs=dict(fontsize=16), 
                         color="blue",
+                        # quantiles=[],
+                        # levels=[0.9],
                         plot_density=True, 
                         plot_datapoints=False, 
                         fill_contours=True,
@@ -47,15 +50,8 @@ params = {
 }
 plt.rcParams.update(params)
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '2,3'
 
-# Choose the desired GPU device -- useful in case there are multiple in use
-chosen_device = jax.devices()[2]
-jax.config.update("jax_platform_name", "gpu")
-jax.config.update("jax_default_device", chosen_device)
-
-
-
+load_online_data = False
 labels = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$\Lambda$', r'$\delta\Lambda$', r'$d_{\rm{L}}/{\rm Mpc}$',
                r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
 
@@ -73,8 +69,6 @@ duration = T
 post_trigger_duration = 2
 epoch = duration - post_trigger_duration
 f_ref = fmin 
-# gmst = GreenwichMeanSiderealTime(trigger_time)
-# gsmt = Time(trigger_time, format="gps").sidereal_time("apparent", "greenwich").rad
 
 ### Getting detector data
 
@@ -104,83 +98,113 @@ V1_frequency = V1_frequency[(V1_frequency>minimum_frequency)*(V1_frequency<maxim
 
 ### Getting ifos and overwriting with above data
 
-H1.load_data(gps, post_trigger_duration, post_trigger_duration, fmin, fmax, psd_pad=16, tukey_alpha=0.2)
-L1.load_data(gps, post_trigger_duration, post_trigger_duration, fmin, fmax, psd_pad=16, tukey_alpha=0.2)
-V1.load_data(gps, post_trigger_duration, post_trigger_duration, fmin, fmax, psd_pad=16, tukey_alpha=0.2)
+if load_online_data:
+    tukey_alpha = 2 / (duration / 2)
 
-# Overwrite results
-H1.frequencies = H1_frequency
-H1.data = H1_data
-H1.psd = H1_psd 
+    H1.load_data(gps, duration, 2, fmin, fmax, psd_pad=16, tukey_alpha=tukey_alpha)
+    L1.load_data(gps, duration, 2, fmin, fmax, psd_pad=16, tukey_alpha=tukey_alpha)
+    V1.load_data(gps, duration, 2, fmin, fmax, psd_pad=16, tukey_alpha=tukey_alpha)
 
-L1.frequencies = L1_frequency
-L1.data = L1_data
-L1.psd = L1_psd 
+    H1.load_psd_from_file('../../data/GW170817-IMRD_data0_1187008882-43_generation_data_dump.pickle_H1_psd.txt')
+    L1.load_psd_from_file('../../data/GW170817-IMRD_data0_1187008882-43_generation_data_dump.pickle_L1_psd.txt')
+    V1.load_psd_from_file('../../data/GW170817-IMRD_data0_1187008882-43_generation_data_dump.pickle_V1_psd.txt')
 
-V1.frequencies = V1_frequency
-V1.data = V1_data
-V1.psd = V1_psd 
+else:
+    H1.frequencies = H1_frequency
+    H1.data = H1_data
+    H1.psd = H1_psd 
 
+    L1.frequencies = L1_frequency
+    L1.data = L1_data
+    L1.psd = L1_psd 
 
-# TODO double-check whether these are params before or after transformation
+    V1.frequencies = V1_frequency
+    V1.data = V1_data
+    V1.psd = V1_psd 
 
-# prior_range = jnp.array([[1.18,1.21],[0.125,1],[-0.05,0.05],[-0.05,0.05],[1,75],[-0.01,0.02],[0,2*np.pi],[-1,1],[0,np.pi],[0,2*np.pi],[-1,1]])
-# rng_key_set = initialize_rng_keys(n_chains, seed=42)
-# initial_position = jax.random.uniform(rng_key_set[0], shape=(int(n_chains), n_dim)) * 1
-# for i in range(n_dim):
-#     initial_position = initial_position.at[:,i].set(initial_position[:,i]*(prior_range[i,1]-prior_range[i,0])+prior_range[i,0])
-    
-# Prior
-prior = Uniform(
-    xmin=[1.18, 0.125, -0.05, -0.05,    0.0, -500.0,  1.0, -0.1,        0.0, -1.0,    0.0,        0.0, -1],
-    xmax=[1.21,   1.0,  0.05,  0.05, 3000.0,  500.0, 75.0,  0.1, 2 * jnp.pi,  1.0, jnp.pi, 2 * jnp.pi,  1],
-    naming=[
-        "M_c",
-        "q",
-        "s1_z", 
-        "s2_z", 
-        "lambda_tilde",
-        "delta_lambda_tilde",
-        "d_L",
-        "t_c",
-        "phase_c",
-        "cos_iota",
-        "psi",
-        "ra",
-        "sin_dec",
-    ],
-    transforms = {"q": ("eta", lambda params: params['q']/(1+params['q'])**2),
-                 "cos_iota": ("iota",lambda params: jnp.arccos(jnp.arcsin(jnp.sin(params['cos_iota']/2*jnp.pi))*2/jnp.pi)),
-                 "sin_dec": ("dec",lambda params: jnp.arcsin(jnp.arcsin(jnp.sin(params['sin_dec']/2*jnp.pi))*2/jnp.pi))}
+### Define priors
+
+# Internal parameters
+Mc_prior = Uniform(1.18, 1.21, naming=["M_c"])
+q_prior = Uniform(
+    0.125,
+    1.0,
+    naming=["q"],
+    transforms={"q": ("eta", lambda params: params["q"] / (1 + params["q"]) ** 2)},
 )
+s1z_prior                = Uniform(-0.05, 0.05, naming=["s1_z"])
+s2z_prior                = Uniform(-0.05, 0.05, naming=["s2_z"])
+lambda_tilde_prior       = Uniform(0.0, 3000.0, naming=["lambda_tilde"])
+delta_lambda_tilde_prior = Uniform(-500.0, 500.0, naming=["delta_lambda_tilde"])
+
+# External parameters
+# dL_prior       = Uniform(0.0, 75.0, naming=["d_L"])
+dL_prior       = Powerlaw(1.0, 75.0, 2.0, naming=["d_L"])
+t_c_prior      = Uniform(-0.1, 0.1, naming=["t_c"])
+phase_c_prior  = Uniform(0.0, 2 * jnp.pi, naming=["phase_c"])
+cos_iota_prior = Uniform(
+    -1.0,
+    1.0,
+    naming=["cos_iota"],
+    transforms={
+        "cos_iota": (
+            "iota",
+            lambda params: jnp.arccos(
+                jnp.arcsin(jnp.sin(params["cos_iota"] / 2 * jnp.pi)) * 2 / jnp.pi
+            ),
+        )
+    },
+)
+psi_prior     = Uniform(0.0, jnp.pi, naming=["psi"])
+ra_prior      = Uniform(0.0, 2 * jnp.pi, naming=["ra"])
+sin_dec_prior = Uniform(
+    -1.0,
+    1.0,
+    naming=["sin_dec"],
+    transforms={
+        "sin_dec": (
+            "dec",
+            lambda params: jnp.arcsin(
+                jnp.arcsin(jnp.sin(params["sin_dec"] / 2 * jnp.pi)) * 2 / jnp.pi
+            ),
+        )
+    },
+)
+
+prior = Composite([
+        Mc_prior,
+        q_prior,
+        s1z_prior,
+        s2z_prior,
+        lambda_tilde_prior,
+        delta_lambda_tilde_prior,
+        dL_prior,
+        t_c_prior,
+        phase_c_prior,
+        cos_iota_prior,
+        psi_prior,
+        ra_prior,
+        sin_dec_prior,
+    ]
+)
+
+# The following only works if every prior has xmin and xmax property, which is OK for Uniform and Powerlaw
+bounds = jnp.array([[p.xmin, p.xmax] for p in prior.priors]).T
 
 ### Create likelihood object
 
-ref_params = {'M_c': 1.19755206, 
-              'eta': 0.24168149, 
-              's1_z': 0.04976656, 
-              's2_z': -0.03608625, 
-              'lambda_tilde': 152.89049789, 
-              'delta_lambda_tilde': -17.72076953, 
-              'd_L': 11.55338337, 
-              't_c': 0.00048855, 
-              'phase_c': 5.7032479, 
-              'iota': 1.81399029, 
-              'psi': 1.59702883, 
-              'ra': 3.41808648, 
-              'dec': -0.40636011
-}
+# TODO put the reference parameters here?
+ref_params = None
 
-# TODO change back to HeterodynedTransientLikelihoodFD
+# NOTE I am checking whether 100 bins also gives fine results or not
+n_bins = 100
+likelihood = HeterodynedTransientLikelihoodFD([H1, L1, V1], prior=prior, bounds=bounds, waveform=RippleIMRPhenomD_NRTidalv2(), trigger_time=gps, duration=T, n_bins=n_bins, ref_params=ref_params)
 
-likelihood = HeterodynedTransientLikelihoodFD([H1, L1, V1], prior=prior, bounds=[prior.xmin, prior.xmax], waveform=RippleIMRPhenomD_NRTidalv2(), trigger_time=gps, duration=T, n_bins=500, ref_params=ref_params)
+print("Running with n_bins  = ", n_bins)
 
 ### Create sampler and jim objects
 
-# Mass matrix (this is copy pasted from the TurboPE set up)
-# TODO get automated mass matrix, or make sure this doesn't break things
-eps = 1e-6
-n_chains = 1000
+eps = 1e-3
 n_dim = 13
 mass_matrix = jnp.eye(n_dim)
 mass_matrix = mass_matrix.at[0,0].set(1e-5)
@@ -192,15 +216,6 @@ mass_matrix = mass_matrix.at[11,11].set(1e-2)
 mass_matrix = mass_matrix.at[12,12].set(1e-2)
 local_sampler_arg = {"step_size": mass_matrix * eps}
 
-
-### Check the Fisher information matrix for autotuning the mass matrix
-fim = FisherInformationMatrix([H1, L1, V1], waveform=RippleIMRPhenomD_NRTidalv2(), trigger_time=gps, duration=T, post_trigger_duration=post_trigger_duration)
-tuned_mass_matrix = fim.tune_mass_matrix(prior, RippleIMRPhenomD_NRTidalv2(), ref_params, H1.frequencies)
-local_sampler_arg = {"step_size": tuned_mass_matrix * 1e-8}
-
-print("tuned_mass_matrix")
-print(jnp.diag(tuned_mass_matrix))
-
 outdir_name = "./outdir/"
 
 jim = Jim(
@@ -209,11 +224,11 @@ jim = Jim(
     n_loop_pretraining=0,
     n_loop_training=200,
     n_loop_production=200,
-    n_local_steps=10,
-    n_global_steps=10,
-    n_chains=n_chains,
+    n_local_steps=200,
+    n_global_steps=200,
+    n_chains=2000,
     n_epochs=100,
-    learning_rate=0.0001,
+    learning_rate=0.001,
     max_samples=50000,
     momentum=0.9,
     batch_size=50000,
@@ -221,8 +236,6 @@ jim = Jim(
     keep_quantile=0.0,
     train_thinning=10,
     output_thinning=30,    
-    num_layers = 6,
-    hidden_size = [32,32],
     n_loops_maximize_likelihood = 2000,
     local_sampler_arg=local_sampler_arg,
     outdir_name=outdir_name
@@ -250,7 +263,6 @@ jim.print_summary()
 
 ### Diagnosis plots of summaries
 print("Creating plots")
-jim.Sampler.plot_summary("pretraining")
 jim.Sampler.plot_summary("training")
 jim.Sampler.plot_summary("production")
 
