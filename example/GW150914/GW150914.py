@@ -1,23 +1,34 @@
-import os
-import numpy as np
-
-import time
+# jim
 from jimgw.jim import Jim
-from jimgw.detector import H1, L1
+from jimgw.detector import H1, L1, V1
 from jimgw.likelihood import HeterodynedTransientLikelihoodFD, TransientLikelihoodFD
-from jimgw.waveform import RippleIMRPhenomD
-from jimgw.prior import Uniform
+from jimgw.waveform import RippleIMRPhenomD, RippleTaylorF2
+from jimgw.prior import Uniform, Powerlaw, Composite, Unconstrained_Uniform
+# ripple
+# flowmc
+from flowMC.utils.PRNG_keys import initialize_rng_keys
+# jax
 import jax.numpy as jnp
 import jax
-
-import matplotlib.pyplot as plt
-import shutil
-import corner
-
-# from flowMC.utils.diagnosis import Diagnosis
-from flowMC.utils import gelman_rubin
-
+chosen_device = jax.devices()[2] # e.g. device with index 2
+jax.config.update("jax_platform_name", "gpu")
+jax.config.update("jax_default_device", chosen_device)
+# ### DEBUG
+# jax.config.update("jax_debug_nans", True)
+# jax.config.update("jax_disable_jit", True)
+# ### DEBUG
+# others
+import time
+import numpy as np
 jax.config.update("jax_enable_x64", True)
+from astropy.time import Time
+
+# import urllib.request
+import os
+import shutil
+import numpy as np
+import matplotlib.pyplot as plt
+import corner
 
 # TODO move!!!
 default_corner_kwargs = dict(bins=40, 
@@ -43,10 +54,9 @@ params = {
 }
 plt.rcParams.update(params)
 
-# labels = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$\Lambda$', r'$\delta\Lambda$', r'$d_{\rm{L}}/{\rm Mpc}$',
-#                r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
 
-labels = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$d_{\rm{L}}/{\rm Mpc}$',
+load_online_data = False
+labels = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$\Lambda$', r'$\delta\Lambda$', r'$d_{\rm{L}}/{\rm Mpc}$',
                r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
 
 ###########################################
@@ -57,55 +67,97 @@ total_time_start = time.time()
 
 # first, fetch a 4s segment centered on GW150914
 gps = 1126259462.4
-start = gps - 2
-end = gps + 2
+duration = 4
+post_trigger_duration = 2
+start_pad = duration - post_trigger_duration
+end_pad = post_trigger_duration
 fmin = 20.0
 fmax = 1024.0
 
 ifos = ["H1", "L1"]
 
-H1.load_data(gps, 2, 2, fmin, fmax, psd_pad=16, tukey_alpha=0.2)
-L1.load_data(gps, 2, 2, fmin, fmax, psd_pad=16, tukey_alpha=0.2)
+H1.load_data(gps, start_pad, end_pad, fmin, fmax, psd_pad=16, tukey_alpha=0.2)
+L1.load_data(gps, start_pad, end_pad, fmin, fmax, psd_pad=16, tukey_alpha=0.2)
 
-prior = Uniform(
-    xmin=[10, 0.125, -1.0, -1.0,    0.0, -0.05,        0.0, -1.0,    0.0,        0.0, -1.0],
-    xmax=[80.0, 1.0,  1.0,  1.0, 2000.0,  0.05, 2 * jnp.pi,  1.0, jnp.pi, 2 * jnp.pi,  1.0],
-    naming=[
-        "M_c",
-        "q",
-        "s1_z",
-        "s2_z",
-        "d_L",
-        "t_c",
-        "phase_c",
-        "cos_iota",
-        "psi",
-        "ra",
-        "sin_dec",
-    ],
-    transforms = {"q": ("eta", lambda params: params['q']/(1+params['q'])**2),
-                 "cos_iota": ("iota",lambda params: jnp.arccos(jnp.arcsin(jnp.sin(params['cos_iota']/2*jnp.pi))*2/jnp.pi)),
-                 "sin_dec": ("dec",lambda params: jnp.arcsin(jnp.arcsin(jnp.sin(params['sin_dec']/2*jnp.pi))*2/jnp.pi))} # sin and arcsin are periodize cos_iota and sin_dec
+Mc_prior = Unconstrained_Uniform(10.0, 80.0, naming=["M_c"])
+q_prior = Unconstrained_Uniform(
+    0.125,
+    1.0,
+    naming=["q"],
+    transforms={"q": ("eta", lambda params: params["q"] / (1 + params["q"]) ** 2)},
 )
-likelihood = TransientLikelihoodFD([H1, L1], waveform=RippleIMRPhenomD(), trigger_time=gps, duration=4, post_trigger_duration=2)
+s1z_prior = Unconstrained_Uniform(-1.0, 1.0, naming=["s1_z"])
+s2z_prior = Unconstrained_Uniform(-1.0, 1.0, naming=["s2_z"])
+dL_prior = Unconstrained_Uniform(0.0, 2000.0, naming=["d_L"])
+t_c_prior = Unconstrained_Uniform(-0.05, 0.05, naming=["t_c"])
+phase_c_prior = Unconstrained_Uniform(0.0, 2 * jnp.pi, naming=["phase_c"])
+cos_iota_prior = Unconstrained_Uniform(
+    -1.0,
+    1.0,
+    naming=["cos_iota"],
+    transforms={
+        "cos_iota": (
+            "iota",
+            lambda params: jnp.arccos(
+                jnp.arcsin(jnp.sin(params["cos_iota"] / 2 * jnp.pi)) * 2 / jnp.pi
+            ),
+        )
+    },
+)
+psi_prior = Unconstrained_Uniform(0.0, jnp.pi, naming=["psi"])
+ra_prior = Unconstrained_Uniform(0.0, 2 * jnp.pi, naming=["ra"])
+sin_dec_prior = Unconstrained_Uniform(
+    -1.0,
+    1.0,
+    naming=["sin_dec"],
+    transforms={
+        "sin_dec": (
+            "dec",
+            lambda params: jnp.arcsin(
+                jnp.arcsin(jnp.sin(params["sin_dec"] / 2 * jnp.pi)) * 2 / jnp.pi
+            ),
+        )
+    },
+)
+
+prior = Composite(
+    [
+        Mc_prior,
+        q_prior,
+        s1z_prior,
+        s2z_prior,
+        dL_prior,
+        t_c_prior,
+        phase_c_prior,
+        cos_iota_prior,
+        psi_prior,
+        ra_prior,
+        sin_dec_prior,
+    ]
+)
+likelihood = TransientLikelihoodFD(
+    [H1, L1],
+    waveform=RippleIMRPhenomD(),
+    trigger_time=gps,
+    duration=4,
+    post_trigger_duration=2,
+)
+
 
 mass_matrix = jnp.eye(11)
 mass_matrix = mass_matrix.at[1, 1].set(1e-3)
 mass_matrix = mass_matrix.at[5, 5].set(1e-3)
 local_sampler_arg = {"step_size": mass_matrix * 3e-3}
 
-outdir_name = "./outdir/"
-
 jim = Jim(
     likelihood,
     prior,
-    n_loop_pretraining=0,
-    n_loop_training=200,
-    n_loop_production=200,
-    n_local_steps=200,
-    n_global_steps=200,
-    n_chains=1000,
-    n_epochs=100,
+    n_loop_training=100,
+    n_loop_production=10,
+    n_local_steps=150,
+    n_global_steps=150,
+    n_chains=500,
+    n_epochs=50,
     learning_rate=0.001,
     max_samples=45000,
     momentum=0.9,
@@ -115,33 +167,21 @@ jim = Jim(
     train_thinning=1,
     output_thinning=10,
     local_sampler_arg=local_sampler_arg,
-    verbose=False,
-    outdir_name = outdir_name,
 )
 
-# jim.maximize_likelihood([prior.xmin, prior.xmax])
 jim.sample(jax.random.PRNGKey(42))
-jim.print_summary()
 
-# === Show results, save output ===
 
-# Cleaning outdir
-for filename in os.listdir(outdir_name):
-    file_path = os.path.join(outdir_name, filename)
-    try:
-        if os.path.isfile(file_path) or os.path.islink(file_path):
-            os.unlink(file_path)
-        elif os.path.isdir(file_path):
-            shutil.rmtree(file_path)
-    except Exception as e:
-        print('Failed to delete %s. Reason: %s' % (file_path, e))
+######################
+### POSTPROCESSING ###
+######################
 
+outdir_name = "./outdir/"
 ### Summary
 jim.print_summary()
 
 ### Diagnosis plots of summaries
 print("Creating plots")
-jim.Sampler.plot_summary("pretraining")
 jim.Sampler.plot_summary("training")
 jim.Sampler.plot_summary("production")
 
@@ -172,10 +212,10 @@ name = outdir_name + "results_production.png"
 
 data = np.load(file)
 # TODO improve the following: ignore t_c, and reshape with n_dims, and do conversions
-idx_list = [0,1,2,3,4,6,7,8,9,10]
-chains = data['chains'][:,:,idx_list].reshape(-1,10)
-chains[:,6] = np.arccos(chains[:,6])
-chains[:,9] = np.arcsin(chains[:,9])
+idx_list = [0,1,2,3,4,5,6,8,9,10,11,12]
+chains = data['chains'][:,:,idx_list].reshape(-1,12)
+chains[:,8] = np.arccos(chains[:,8])
+chains[:,11] = np.arcsin(chains[:,11])
 chains = np.asarray(chains)
 corner_kwargs = default_corner_kwargs
 fig = corner.corner(chains, labels = labels, hist_kwargs={'density': True}, **default_corner_kwargs)

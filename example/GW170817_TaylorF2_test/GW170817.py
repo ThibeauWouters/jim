@@ -2,7 +2,7 @@
 from jimgw.jim import Jim
 from jimgw.detector import H1, L1, V1
 from jimgw.likelihood import HeterodynedTransientLikelihoodFD, TransientLikelihoodFD
-from jimgw.waveform import RippleIMRPhenomD_NRTidalv2
+from jimgw.waveform import RippleTaylorF2
 from jimgw.prior import Uniform, Powerlaw, Composite 
 # ripple
 # flowmc
@@ -226,29 +226,10 @@ if use_lambda_tildes:
         'dec': 0.23000523
     }
 else:
-    ref_params = {
-        'M_c': 1.19750262,
-        'eta': 0.2484764,
-        's1_z': -0.03975773,
-        's2_z': 0.04999791,
-        'lambda_1': 324.62202112,
-        'lambda_2': 983.29238442,
-        'd_L': 9.04618568,
-        't_c': 0.01208512,
-        'phase_c': 2.89268034,
-        'iota': 1.58998109,
-        'psi': 1.92009723,
-        'ra': 5.24371115,
-        'dec': 0.48518752
-    }
+    ref_params = None
 
-
-
-# ref_params = None
-
-# NOTE I am checking whether 100 bins also gives fine results or not
 n_bins = 100
-waveform = RippleIMRPhenomD_NRTidalv2(use_lambda_tildes=use_lambda_tildes)
+waveform = RippleTaylorF2(use_lambda_tildes=use_lambda_tildes)
 likelihood = HeterodynedTransientLikelihoodFD([H1, L1, V1], prior=prior, bounds=bounds, waveform=waveform, trigger_time=gps, duration=T, n_bins=n_bins, ref_params=ref_params)
 
 print("Running with n_bins  = ", n_bins)

@@ -1,11 +1,16 @@
 from jaxtyping import Array
 from ripple.waveforms.IMRPhenomD import gen_IMRPhenomD_hphc, gen_IMRPhenomD
 from ripple.waveforms.IMRPhenomPv2 import gen_IMRPhenomPv2_hphc
-# # Tidal waveforms
+# Tidal waveforms
 from ripple.waveforms.TaylorF2 import gen_TaylorF2_hphc
 from ripple.waveforms.X_NRTidalv2 import gen_NRTidalv2_hphc
 import jax.numpy as jnp
 from abc import ABC
+import jax
+# ### DEBUG
+# jax.config.update("jax_debug_nans", True)
+# jax.config.update("jax_disable_jit", True)
+# ### DEBUG
 
 
 class Waveform(ABC):
@@ -79,7 +84,7 @@ class RippleTaylorF2(Waveform):
 
     f_ref: float
 
-    def __init__(self, f_ref: float = 20.0, use_lambda_tildes: bool = True):
+    def __init__(self, f_ref: float = 20.0, use_lambda_tildes: bool = False):
         self.f_ref = f_ref
         self.use_lambda_tildes = use_lambda_tildes
 
@@ -87,20 +92,21 @@ class RippleTaylorF2(Waveform):
         output = {}
         ra = params["ra"]
         dec = params["dec"]
+        
         if self.use_lambda_tildes:
-            first_lambda_params = params["lambda_tilde"]
-            second_lambda_params = params["delta_lambda_tilde"]
+            first_lambda_param = params["lambda_tilde"]
+            second_lambda_param = params["delta_lambda_tilde"]
         else:
-            first_lambda_params = params["lambda1"]
-            second_lambda_params = params["lambda2"]
+            first_lambda_param = params["lambda_1"]
+            second_lambda_param = params["lambda_2"]
         
         theta = [
             params["M_c"],
             params["eta"],
             params["s1_z"],
             params["s2_z"],
-            first_lambda_params,
-            second_lambda_params,
+            first_lambda_param,
+            second_lambda_param,
             params["d_L"],
             0,
             params["phase_c"],
@@ -111,39 +117,11 @@ class RippleTaylorF2(Waveform):
         output["c"] = hc
         return output
     
-class RippleTaylorF2NoTidal(Waveform):
-
-    f_ref: float
-
-    def __init__(self, f_ref: float = 20.0):
-        self.f_ref = f_ref
-
-    def __call__(self, frequency: Array, params: dict) -> dict:
-        output = {}
-        ra = params["ra"]
-        dec = params["dec"]
-        theta = [
-            params["M_c"],
-            params["eta"],
-            params["s1_z"],
-            params["s2_z"],
-            0, # no tidal
-            0, # no tidal
-            params["d_L"],
-            0,
-            params["phase_c"],
-            params["iota"],
-        ]
-        hp, hc = gen_TaylorF2_hphc(frequency, theta, self.f_ref)
-        output["p"] = hp
-        output["c"] = hc
-        return output
-    
 class RippleIMRPhenomD_NRTidalv2(Waveform):
 
     f_ref: float
 
-    def __init__(self, f_ref: float = 20.0, use_lambda_tildes: bool = True):
+    def __init__(self, f_ref: float = 20.0, use_lambda_tildes: bool = False):
         self.f_ref = f_ref
         self.use_lambda_tildes = use_lambda_tildes
 
@@ -153,24 +131,25 @@ class RippleIMRPhenomD_NRTidalv2(Waveform):
         dec = params["dec"]
         
         if self.use_lambda_tildes:
-            first_lambda_params = params["lambda_tilde"]
-            second_lambda_params = params["delta_lambda_tilde"]
+            first_lambda_param = params["lambda_tilde"]
+            second_lambda_param = params["delta_lambda_tilde"]
         else:
-            first_lambda_params = params["lambda1"]
-            second_lambda_params = params["lambda2"]
+            first_lambda_param = params["lambda_1"]
+            second_lambda_param = params["lambda_2"]
         
         theta = [
             params["M_c"],
             params["eta"],
             params["s1_z"],
             params["s2_z"],
-            first_lambda_params,
-            second_lambda_params,
+            first_lambda_param,
+            second_lambda_param,
             params["d_L"],
             0,
             params["phase_c"],
             params["iota"],
         ]
+        
         hp, hc = gen_NRTidalv2_hphc(frequency, theta, self.f_ref, use_lambda_tildes=self.use_lambda_tildes)
         output["p"] = hp
         output["c"] = hc

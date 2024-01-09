@@ -9,7 +9,16 @@ import matplotlib.pyplot as plt
 import corner
 import pandas as pd
 
-from ripple import get_chi_eff, Mc_eta_to_ms
+from ripple import get_chi_eff, Mc_eta_to_ms, lambdas_to_lambda_tildes
+
+### Plotting hyperparameters
+
+use_weights = False
+use_d_L_quantile = False
+use_chi_eff = True
+convert_lambda_tildes = True # convert the lambda parameters from sampling to lambda_tilde parameters
+
+print(f"Creating plots with use_weights={use_weights}, use_d_L_quantile={use_d_L_quantile}, use_chi_eff={use_chi_eff}")
 
 ### Utilities
 
@@ -39,11 +48,13 @@ params = {
 }
 plt.rcParams.update(params)
 
-labels = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$\Lambda$', r'$\delta\Lambda$' ,r'$d_{\rm{L}}/{\rm Mpc}$',
-               r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
-
-labels_chi_eff = [r'$M_c/M_\odot$', r'$q$', r'$\chi_{\rm eff}$', r'$\Lambda$', r'$\delta\Lambda$' ,r'$d_{\rm{L}}/{\rm Mpc}$',
-               r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
+if use_chi_eff:
+    labels_chi_eff = [r'$M_c/M_\odot$', r'$q$', r'$\chi_{\rm eff}$', r'$\tilde{\Lambda}$', r'$\delta\tilde{\Lambda}$', r'$d_{\rm{L}}/{\rm Mpc}$',
+                r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
+else:
+    labels = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$\tilde{\Lambda}$', r'$\delta\tilde{\Lambda}$', r'$d_{\rm{L}}/{\rm Mpc}$',
+                r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
+    
 
 def get_chains(event, data_path = "../../data/"):
     """
@@ -93,19 +104,11 @@ def powerlaw_transform(d_L_quantile, max_distance:float=75, alpha:float=2):
 ### Fetch data
 
 which_list = ["production", "NF"]
-outdir = "../GW170817_TaylorF2/outdir/"
+outdir = "../GW170817_NRTidalv2/outdir/"
 corner_kwargs = default_corner_kwargs
 
 print(f"Reading data from {outdir}")
 idx_list = [0,1,2,3,4,5,6,8,9,10,11,12]
-
-### Plotting hyperparameters
-
-use_weights = False
-use_d_L_quantile = False
-use_chi_eff = True
-
-print(f"Creating plots with use_weights={use_weights}, use_d_L_quantile={use_d_L_quantile}, use_chi_eff={use_chi_eff}")
 
 ### Plotting
 for which in which_list:
@@ -161,6 +164,25 @@ for which in which_list:
         chains = np.delete(chains, [2,3], axis=1)
         chains = np.insert(chains, 2, chi_eff, axis=1)
         labels = labels_chi_eff
+        
+    # Do the conversion for lambda parameters
+    
+    if convert_lambda_tildes:
+        
+        # NOTE the indices shift if we use chi_eff
+        lambda1_index = 3 if use_chi_eff else 4
+        lambda2_index = 4 if use_chi_eff else 5
+            
+        mc, q, lambda1, lambda2 = chains[:,0], chains[:,1], chains[:,lambda1_index], chains[:,lambda2_index]
+        eta = q/(1+q)**2
+        
+        m1, m2 = Mc_eta_to_ms(jnp.array([mc, eta]))
+        
+        lambda_tilde, delta_lambda_tilde = lambdas_to_lambda_tildes(jnp.array([lambda1, lambda2, m1, m2]))
+        
+        # Now, we remove the second and third column from chains, and add chi_eff as new column at index 2
+        chains[:, lambda1_index] = lambda_tilde
+        chains[:, lambda2_index] = delta_lambda_tilde
     
     fig = corner.corner(chains, labels = labels, weights=weights, hist_kwargs={'density': True}, **default_corner_kwargs)
     corner_kwargs["color"] = "red"

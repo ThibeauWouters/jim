@@ -1,6 +1,10 @@
 from abc import ABC, abstractmethod
 
 import jax
+# ### DEBUG
+# jax.config.update("jax_debug_nans", True)
+# jax.config.update("jax_disable_jit", True)
+# ### DEBUG
 import jax.numpy as jnp
 import numpy as np
 from astropy.time import Time
@@ -232,6 +236,10 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         freq_grid = freq_grid[mask_heterodyne_grid]
         self.freq_grid_low = self.freq_grid_low[mask_heterodyne_low]
         self.freq_grid_center = self.freq_grid_center[mask_heterodyne_center]
+        
+        # Assure frequency grids have same length
+        if len(self.freq_grid_low) > len(self.freq_grid_center):
+            self.freq_grid_low = self.freq_grid_low[:len(self.freq_grid_center)]
 
         h_sky_low = self.waveform(self.freq_grid_low, self.ref_params)
         h_sky_center = self.waveform(self.freq_grid_center, self.ref_params)
@@ -283,7 +291,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
                 freq_grid,
                 self.freq_grid_center,
             )
-
+            
             self.A0_array[detector.name] = A0[mask_heterodyne_center]
             self.A1_array[detector.name] = A1[mask_heterodyne_center]
             self.B0_array[detector.name] = B0[mask_heterodyne_center]
