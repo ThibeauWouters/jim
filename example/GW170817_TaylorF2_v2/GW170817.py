@@ -4,14 +4,14 @@ from jimgw.detector import H1, L1, V1
 from jimgw.likelihood import HeterodynedTransientLikelihoodFD, TransientLikelihoodFD
 from jimgw.waveform import RippleIMRPhenomD, RippleTaylorF2
 from jimgw.prior import Uniform, Powerlaw, Composite 
-from jimgw.fisher_information_matrix import FisherInformationMatrix, ORIGINAL_MASS_MATRIX, plot_ratio_comparison
+from jimgw.fisher_information_matrix import FisherInformationMatrix
 # ripple
 # flowmc
 from flowMC.utils.PRNG_keys import initialize_rng_keys
 # jax
 import jax.numpy as jnp
 import jax
-chosen_device = jax.devices()[1]
+chosen_device = jax.devices()[0]
 jax.config.update("jax_platform_name", "gpu")
 jax.config.update("jax_default_device", chosen_device)
 # others
@@ -200,7 +200,6 @@ prior = Composite([
 
 # The following only works if every prior has xmin and xmax property, which is OK for Uniform and Powerlaw
 bounds = jnp.array([[p.xmin, p.xmax] for p in prior.priors]).T
-naming = prior.get_naming()
 
 ### Create likelihood object
 ref_params = {
@@ -227,47 +226,31 @@ print("Running with n_bins  = ", n_bins)
 
 ### Create sampler and jim objects
 
-# eps = 1e-2
-
-# mass_matrix = jnp.eye(n_dim)
-# mass_matrix = mass_matrix.at[0,0].set(1e-5)
-# mass_matrix = mass_matrix.at[1,1].set(1e-4)
-# mass_matrix = mass_matrix.at[2,2].set(1e-3)
-# mass_matrix = mass_matrix.at[3,3].set(1e-3)
-# mass_matrix = mass_matrix.at[7,7].set(1e-5)
-# mass_matrix = mass_matrix.at[11,11].set(1e-2)
-# mass_matrix = mass_matrix.at[12,12].set(1e-2)
-# local_sampler_arg = {"step_size": mass_matrix * eps}
-
-fim = FisherInformationMatrix([H1, L1, V1], 
-                              waveform = waveform, 
-                              prior = prior,
-                              trigger_time = gps, 
-                              duration = T, 
-                              verbose = True)
-
-fim.compute_fim(ref_params, frequencies)
-fim.invert()
-tuned_mass_matrix = fim.get_tuned_mass_matrix()
-
-error = fim.compute_inversion_error(fim.fisher_information_matrix_copy, fim.inverse, only_diagonal=True)
-print("Inversion error, diagonal only = ", error)
-
-local_sampler_arg = {"step_size": tuned_mass_matrix}
-
+eps = 1e-2
 n_chains = 1000
 n_dim = 13
-outdir_name="./outdir/"
+mass_matrix = jnp.eye(n_dim)
+mass_matrix = mass_matrix.at[0,0].set(1e-5)
+mass_matrix = mass_matrix.at[1,1].set(1e-4)
+mass_matrix = mass_matrix.at[2,2].set(1e-3)
+mass_matrix = mass_matrix.at[3,3].set(1e-3)
+mass_matrix = mass_matrix.at[7,7].set(1e-5)
+mass_matrix = mass_matrix.at[11,11].set(1e-2)
+mass_matrix = mass_matrix.at[12,12].set(1e-2)
+local_sampler_arg = {"step_size": mass_matrix * eps}
+
+outdir_name = "./outdir/"
+
 jim = Jim(
     likelihood,
     prior,
     n_loop_pretraining=0,
-    n_loop_training=200,
+    n_loop_training=10,
     n_loop_production=20,
     n_local_steps=200,
     n_global_steps=200,
     n_chains=n_chains,
-    n_epochs=50,
+    n_epochs=100,
     learning_rate=0.001,
     max_samples=50000,
     momentum=0.9,
@@ -305,11 +288,6 @@ for filename in os.listdir(outdir_name):
 
 ### Summary
 jim.print_summary()
-
-print("Plotting mass matrices ratios and step sizes")
-plot_ratio_comparison(ORIGINAL_MASS_MATRIX, tuned_mass_matrix, "Original", "Tuned", naming)
-plot_ratio_comparison(ORIGINAL_MASS_MATRIX, tuned_mass_matrix, "Original", "Tuned", naming, use_ratio = False)
-print("Plotting mass matrices ratios and step sizes: DONE")
 
 ### Diagnosis plots of summaries
 print("Creating plots")

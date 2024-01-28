@@ -6,22 +6,6 @@ import jax.numpy as jnp
 import jax
 import numpy as np
 import matplotlib.pyplot as plt 
-import corner
-import pandas as pd
-
-from ripple import get_chi_eff, Mc_eta_to_ms, lambdas_to_lambda_tildes
-
-### Plotting hyperparameters
-
-use_weights = False
-use_d_L_quantile = False
-use_chi_eff = True
-convert_lambda_tildes = True # convert the lambda parameters from sampling to lambda_tilde parameters
-
-print(f"Creating plots with use_weights={use_weights}, use_d_L_quantile={use_d_L_quantile}, use_chi_eff={use_chi_eff}")
-
-### Utilities
-
 default_corner_kwargs = dict(bins=40, 
                         smooth=1., 
                         show_titles=False,
@@ -37,7 +21,6 @@ default_corner_kwargs = dict(bins=40,
                         min_n_ticks=3,
                         save=False
 )
-
 params = {
     "axes.labelsize": 30,
     "axes.titlesize": 30,
@@ -47,12 +30,37 @@ params = {
     'ytick.labelsize': 16
 }
 plt.rcParams.update(params)
+import corner
+import pandas as pd
+
+from ripple import get_chi_eff, Mc_eta_to_ms, lambdas_to_lambda_tildes
+
+### Plotting hyperparameters
+
+use_weights = False
+use_d_L_quantile = False
+use_chi_eff = True
+convert_lambda_tildes = True # convert the lambda parameters from sampling to lambda_tilde parameters
+which_list = ["production"]
+outdir = "../GW170817_TaylorF2_FIM/outdir/"
+print(f"Outdir is {outdir}")
+corner_kwargs = default_corner_kwargs
+
+print(f"Creating plots with use_weights={use_weights}, use_d_L_quantile={use_d_L_quantile}, use_chi_eff={use_chi_eff}")
+
+### Utilities
+if convert_lambda_tildes:
+    lambda1_label = r'$\tilde{\Lambda}$'
+    lambda2_label = r'$\delta\tilde{\Lambda}$'
+else:
+    lambda1_label = r'$\Lambda_1$'
+    lambda2_label = r'$\Lambda_2$'    
 
 if use_chi_eff:
-    labels_chi_eff = [r'$M_c/M_\odot$', r'$q$', r'$\chi_{\rm eff}$', r'$\tilde{\Lambda}$', r'$\delta\tilde{\Lambda}$', r'$d_{\rm{L}}/{\rm Mpc}$',
+    labels_chi_eff = [r'$M_c/M_\odot$', r'$q$', r'$\chi_{\rm eff}$', lambda1_label, lambda2_label, r'$d_{\rm{L}}/{\rm Mpc}$',
                 r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
 else:
-    labels = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$\tilde{\Lambda}$', r'$\delta\tilde{\Lambda}$', r'$d_{\rm{L}}/{\rm Mpc}$',
+    labels = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', lambda1_label, lambda2_label, r'$d_{\rm{L}}/{\rm Mpc}$',
                 r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
     
 
@@ -103,15 +111,11 @@ def powerlaw_transform(d_L_quantile, max_distance:float=75, alpha:float=2):
 
 ### Fetch data
 
-which_list = ["production", "NF"]
-outdir = "../GW170817_NRTidalv2/outdir/"
-corner_kwargs = default_corner_kwargs
-
 print(f"Reading data from {outdir}")
 idx_list = [0,1,2,3,4,5,6,8,9,10,11,12]
 
 ### Plotting
-for which in which_list:
+def plot_result(which):
     corner_kwargs["color"] = "blue"
     filename = f"{outdir}results_{which}.npz"
 
@@ -189,3 +193,12 @@ for which in which_list:
     # corner.corner(flowMC_chains, labels = labels, fig=fig, hist_kwargs={'density': True}, **corner_kwargs)
     fig.savefig(outdir + name, bbox_inches='tight')  
     print("Done")
+    
+    
+def main():
+    plot_result("production")
+    plot_result("NF")
+    
+if __name__ == "__main__":
+    main()
+    

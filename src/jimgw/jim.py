@@ -24,7 +24,7 @@ class Jim(object):
     """
 
     # TODO if wanted, make new kwarg a new hyperparameter
-    def __init__(self, likelihood: LikelihoodBase, prior: Prior, save_global_samples_training: bool = True,  **kwargs):
+    def __init__(self, likelihood: LikelihoodBase, prior: Prior, save_global_samples_training: bool = True, adaptive_step_size: bool = True,  **kwargs):
         self.Likelihood = likelihood
         self.Prior = prior
         
@@ -62,6 +62,7 @@ class Jim(object):
             local_sampler,
             model,
             global_sampler = model,
+            adaptive_step_size = adaptive_step_size,
             **kwargs)
         
         # TODO move this if OK

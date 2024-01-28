@@ -439,3 +439,14 @@ class Composite(Prior):
         for prior in self.priors:
             output += prior.log_prob(x)
         return output
+    
+    def get_naming(self, transform_names: bool = True) -> list[str]:
+        
+        naming = self.naming
+        
+        if transform_names:
+            naming = [self.transforms[name][0] for name in naming]
+        
+        return naming
+    
+    
