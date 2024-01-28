@@ -755,7 +755,11 @@ class TriangularGroundBased3G(Detector):
 
         mean = jnp.zeros(shape=freqs.shape + (3,))
 
-        noises = jax.random.multivariate_normal(key, mean, cov, shape=freqs.shape)
+        key, subkey = jax.random.split(key, 2)
+
+        noises_re = jax.random.multivariate_normal(key, mean, cov / 2, shape=freqs.shape)
+        noises_im = jax.random.multivariate_normal(subkey, mean, cov / 2, shape=freqs.shape)
+        noises = noises_re + 1j * noises_im
         align_time = jnp.exp(
             -1j * 2 * jnp.pi * freqs * (params["epoch"] + params["t_c"])
         )
