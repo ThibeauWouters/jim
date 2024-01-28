@@ -7,7 +7,7 @@ from flowMC.utils.EvolutionaryOptimizer import EvolutionaryOptimizer
 from jaxtyping import Array, Float
 from scipy.interpolate import interp1d
 
-from jimgw.single_event.detector import Detector
+from jimgw.single_event.detector import Detector, TriangularGroundBased3G
 from jimgw.prior import Prior
 from jimgw.single_event.waveform import Waveform
 from jimgw.base import LikelihoodBase
@@ -83,19 +83,43 @@ class TransientLikelihoodFD(SingleEventLiklihood):
             waveform_dec = (
                 detector.fd_response(frequencies, waveform_sky, params) * align_time
             )
-            match_filter_SNR = (
-                4
-                * jnp.sum(
-                    (jnp.conj(waveform_dec) * detector.data) / detector.psd * df
-                ).real
-            )
-            optimal_SNR = (
-                4
-                * jnp.sum(
-                    jnp.conj(waveform_dec) * waveform_dec / detector.psd * df
-                ).real
-            )
+            # check if correlation between detectors are expected
+            if not isinstance(detector, TriangularGroundBased3G):
+                match_filter_SNR = (
+                    4
+                    * jnp.sum(
+                        (jnp.conj(waveform_dec) * detector.data) / detector.psd * df
+                    ).real
+                )
+                optimal_SNR = (
+                    4
+                    * jnp.sum(
+                        jnp.conj(waveform_dec) * waveform_dec / detector.psd * df
+                    ).real
+                )
+            else:
+                psd_inv = jnp.linalg.inv(detector.psd)
+                match_filter_SNR = (
+                    4
+                    * jnp.einsum(
+                        'ij,ijk,ik->',
+                        jnp.conj(waveform_dec),
+                        psd_inv,
+                        detector.data
+                    ).real * df
+                )
+                optimal_SNR = (
+                    4
+                    * jnp.einsum(
+                        'ij,ijk,ik->',
+                        jnp.conj(waveform_dec),
+                        psd_inv,
+                        waveform_dec
+                    ).real * df
+                )
+
             log_likelihood += match_filter_SNR - optimal_SNR / 2
+
         return log_likelihood
 
 
