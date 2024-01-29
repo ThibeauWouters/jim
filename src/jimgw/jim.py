@@ -40,6 +40,7 @@ class Jim(object):
             setattr(self, key, value)
             
         self.rng_key_set = initialize_rng_keys(self.hyperparameters["n_chains"], seed=self.hyperparameters["seed"])
+        # step_size_matrix = kwargs["local_sampler_arg"]["step_size"]
         local_sampler = MALA(self.posterior, True, self.local_sampler_arg)
         
         ### New attempt

@@ -1,3 +1,5 @@
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 # jim
 from jimgw.jim import Jim
 from jimgw.detector import H1, L1, V1
@@ -11,9 +13,8 @@ from flowMC.utils.PRNG_keys import initialize_rng_keys
 # jax
 import jax.numpy as jnp
 import jax
-chosen_device = jax.devices()[0]
-jax.config.update("jax_platform_name", "gpu")
-jax.config.update("jax_default_device", chosen_device)
+print("jax.devices()")
+print(jax.devices())
 # others
 import numpy as np
 jax.config.update("jax_enable_x64", True)
@@ -218,7 +219,6 @@ ref_params = {
     'dec': -0.40603519
 }
 
-
 n_bins = 100
 likelihood = HeterodynedTransientLikelihoodFD([H1, L1, V1], prior=prior, bounds=bounds, waveform=waveform, trigger_time=gps, duration=T, n_bins=n_bins, ref_params=ref_params)
 
@@ -246,10 +246,10 @@ jim = Jim(
     prior,
     n_loop_pretraining=0,
     n_loop_training=10,
-    n_loop_production=20,
+    n_loop_production=10,
     n_local_steps=200,
     n_global_steps=200,
-    n_chains=n_chains,
+    n_chains=100,
     n_epochs=100,
     learning_rate=0.001,
     max_samples=50000,
@@ -269,6 +269,8 @@ start = time.time()
 jim.sample(jax.random.PRNGKey(42))
 ### Heavy computation ends
 end = time.time()
+
+print(jim.Sampler.local_sampler.params["step_size"][0, 0])
 
 # Print time in minutes
 print("Total time taken = ", (end - start) / 60, " minutes")
