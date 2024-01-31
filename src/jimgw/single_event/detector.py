@@ -429,9 +429,8 @@ class GroundBased2G(Detector):
 class TriangularGroundBased3G(Detector):
     polarization_mode: list[Polarization]
     frequencies: Float[Array, " n_sample"]
-    data: Float[Array, " 3 n_sample"]
-    psds: Float[Array, " 3 n_sample"]
-    csds: Float[Array, " 3 n_sample"]
+    data: Float[Array, " n_sample 3"]
+    psd: Float[Array, " n_sample 3 3"]
 
     # giving the values for one of the three detectors
     # the rest will be automatically calculated
@@ -460,9 +459,8 @@ class TriangularGroundBased3G(Detector):
 
         self.polarization_mode = [Polarization(m) for m in modes]
         self.frequencies = jnp.array([])
-        self.data = jnp.array([[], [], []])
-        self.psds = jnp.array([[], [], []])
-        self.csds = jnp.array([[], [], []])
+        self.data = jnp.array([])
+        self.psd = jnp.array([])
 
     @staticmethod
     def _get_arm(
@@ -626,7 +624,7 @@ class TriangularGroundBased3G(Detector):
         )
         return jnp.dot(omega, delta_d) / C_SI
 
-    def antenna_pattern(self, ra: Float, dec: Float, psi: Float, gmst: Float) -> dict:
+    def antenna_pattern(self, ra: Float, dec: Float, psi: Float, gmst: Float) -> list:
         """
         Computes {name} antenna patterns for {modes} polarizations
         at the specified sky location, orientation and GMST.
@@ -655,15 +653,15 @@ class TriangularGroundBased3G(Detector):
         """
         D1, D2, D3 = self.tensors
 
-        antenna_patterns = {}
-        for idx, D in enumerate([D1, D2, D3]):
+        antenna_patterns = []
+        for D in [D1, D2, D3]:
             antenna_patterns_per_det = {}
             for polarization in self.polarization_mode:
                 wave_tensor = polarization.tensor_from_sky(ra, dec, psi, gmst)
                 antenna_patterns_per_det[polarization.name] = jnp.einsum(
                     "ij,ij->", D, wave_tensor
                 )
-            antenna_patterns[f"E{idx + 1}"] = antenna_patterns_per_det
+            antenna_patterns.append(antenna_patterns_per_det)
 
         return antenna_patterns
 
@@ -695,8 +693,7 @@ class TriangularGroundBased3G(Detector):
 
         response = []
 
-        for ifo in antenna_pattern.keys():
-            antenna_pattern_per_det = antenna_pattern[ifo]
+        for antenna_pattern_per_det in antenna_pattern:
             h_detector = jax.tree_util.tree_map(
                 lambda h, antenna: h
                 * antenna
@@ -743,13 +740,13 @@ class TriangularGroundBased3G(Detector):
         E2_psd = self.load_psd(freqs, psd_file_dict['E2'])
         E3_psd = self.load_psd(freqs, psd_file_dict['E3'])
 
-        E12_csd = self.load_csd(freqs, csd_file_dict['E1'])
-        E23_csd = self.load_csd(freqs, csd_file_dict['E2'])
-        E13_csd = self.load_csd(freqs, csd_file_dict['E3'])
+        E12_csd = self.load_csd(freqs, csd_file_dict['E12'])
+        E23_csd = self.load_csd(freqs, csd_file_dict['E23'])
+        E13_csd = self.load_csd(freqs, csd_file_dict['E13'])
 
         psd = jnp.array([[E1_psd, E12_csd, E13_csd],
-                         [E12_csd.conj, E2_psd, E23_csd],
-                         [E13_csd.conj, E23_csd.conj, E3_psd]])
+                         [E12_csd.conj(), E2_psd, E23_csd],
+                         [E13_csd.conj(), E23_csd.conj(), E3_psd]])
         self.psd = jnp.einsum('ijk->kij', psd)
         cov = self.psd / (4 * (freqs[1] - freqs[0]))
 
@@ -768,6 +765,30 @@ class TriangularGroundBased3G(Detector):
         self.data = jnp.array([signals.T[0] * align_time + noises.T[0],
                                signals.T[1] * align_time + noises.T[1],
                                signals.T[2] * align_time + noises.T[2]]).T
+
+        # calculate the optimal SNR and match filter SNR
+        inv_cov = jnp.linalg.inv(cov)
+
+        optimal_SNR_2 = jnp.einsum(
+            'ij,ijk,ik->',
+            signals,
+            inv_cov,
+            signals.conj()
+        ).real
+        optimal_SNR = jnp.sqrt(optimal_SNR_2)
+
+        match_filter_SNR = jnp.einsum(
+            'ij,ijk,ik,i->',
+            self.data,
+            inv_cov,
+            signals.conj(),
+            align_time.conj(),
+        )
+        match_filter_SNR /= optimal_SNR
+
+        print(f"For detector {self.name}:")
+        print(f"Optimal SNR is {optimal_SNR}")
+        print(f"Match filter SNR is {match_filter_SNR}")
 
     @jaxtyped
     def load_psd(
