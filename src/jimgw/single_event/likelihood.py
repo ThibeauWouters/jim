@@ -80,11 +80,11 @@ class TransientLikelihoodFD(SingleEventLiklihood):
             -1j * 2 * jnp.pi * frequencies * (self.epoch + params["t_c"])
         )
         for detector in self.detectors:
-            waveform_dec = (
-                detector.fd_response(frequencies, waveform_sky, params) * align_time
-            )
             # check if correlation between detectors are expected
             if not isinstance(detector, TriangularGroundBased3G):
+                waveform_dec = (
+                    detector.fd_response(frequencies, waveform_sky, params) * align_time
+                )
                 match_filter_SNR = (
                     4
                     * jnp.sum(
@@ -98,23 +98,28 @@ class TransientLikelihoodFD(SingleEventLiklihood):
                     ).real
                 )
             else:
+                waveform_dec = jnp.einsum(
+                    'ij,i->ij',
+                    detector.fd_response(frequencies, waveform_sky, params),
+                    align_time
+                )
                 psd_inv = jnp.linalg.inv(detector.psd)
                 match_filter_SNR = (
                     4
                     * jnp.einsum(
                         'ij,ijk,ik->',
-                        jnp.conj(waveform_dec),
+                        waveform_dec,
                         psd_inv,
-                        detector.data
+                        detector.data.conj()
                     ).real * df
                 )
                 optimal_SNR = (
                     4
                     * jnp.einsum(
                         'ij,ijk,ik->',
-                        jnp.conj(waveform_dec),
+                        waveform_dec,
                         psd_inv,
-                        waveform_dec
+                        waveform_dec.conj()
                     ).real * df
                 )
 
@@ -182,6 +187,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         self.ref_params = self.maximize_likelihood(
             bounds=bounds, prior=prior, popsize=popsize, n_loops=n_loops
         )
+        print(f"Reference parameters are {self.ref_params}")
 
         print("Constructing reference waveforms..")
 
@@ -248,28 +254,59 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
 
         for detector in self.detectors:
             # Get the reference waveforms
-            waveform_ref = (
-                detector.fd_response(frequency_original, h_sky, self.ref_params)
-                * align_time
-            )
-            self.waveform_low_ref[detector.name] = (
-                detector.fd_response(self.freq_grid_low, h_sky_low, self.ref_params)
-                * align_time_low
-            )
-            self.waveform_center_ref[detector.name] = (
-                detector.fd_response(
-                    self.freq_grid_center, h_sky_center, self.ref_params
+            if not isinstance(detector, TriangularGroundBased3G):
+                waveform_ref = (
+                    detector.fd_response(frequency_original, h_sky, self.ref_params)
+                    * align_time
                 )
-                * align_time_center
-            )
-            A0, A1, B0, B1 = self.compute_coefficients(
-                detector.data,
-                waveform_ref,
-                detector.psd,
-                frequency_original,
-                freq_grid,
-                self.freq_grid_center,
-            )
+                self.waveform_low_ref[detector.name] = (
+                    detector.fd_response(self.freq_grid_low, h_sky_low, self.ref_params)
+                    * align_time_low
+                )
+                self.waveform_center_ref[detector.name] = (
+                    detector.fd_response(
+                        self.freq_grid_center, h_sky_center, self.ref_params
+                    )
+                    * align_time_center
+                )
+                A0, A1, B0, B1 = self.compute_coefficients(
+                    detector.data,
+                    waveform_ref,
+                    detector.psd,
+                    frequency_original,
+                    freq_grid,
+                    self.freq_grid_center,
+                )
+            else:
+                waveform_ref = jnp.einsum(
+                    'ij,i->ij',
+                    detector.fd_response(frequency_original, h_sky, self.ref_params),
+                    align_time
+                )
+                self.waveform_low_ref[detector.name] = jnp.einsum(
+                    'ij,i->ij',
+                    detector.fd_response(self.freq_grid_low, h_sky_low, self.ref_params),
+                    align_time_low
+                )
+                self.waveform_center_ref[detector.name] = jnp.einsum(
+                    'ij,i->ij',
+                    detector.fd_response(
+                        self.freq_grid_center, h_sky_center, self.ref_params
+                    ),
+                    align_time_center
+                )
+                A0, A1, B0, B1 = self.compute_coefficients_with_corr(
+                    detector.data,
+                    waveform_ref,
+                    detector.psd,
+                    frequency_original,
+                    freq_grid,
+                    self.freq_grid_center,
+                )
+                A0 = jnp.einsum('i,j->ij', A0, jnp.ones(shape=(3,)))
+                A1 = jnp.einsum('i,j->ij', A1, jnp.ones(shape=(3,)))
+                B0 = jnp.einsum('i,j->ij', B0, jnp.ones(shape=(3,)))
+                B1 = jnp.einsum('i,j->ij', B1, jnp.ones(shape=(3,)))
 
             self.A0_array[detector.name] = A0[mask_heterodyne_center]
             self.A1_array[detector.name] = A1[mask_heterodyne_center]
@@ -290,18 +327,37 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
             -1j * 2 * jnp.pi * frequencies_center * (self.epoch + params["t_c"])
         )
         for detector in self.detectors:
-            waveform_low = (
-                detector.fd_response(frequencies_low, waveform_sky_low, params)
-                * align_time_low
-            )
-            waveform_center = (
-                detector.fd_response(frequencies_center, waveform_sky_center, params)
-                * align_time_center
-            )
+            if not isinstance(detector, TriangularGroundBased3G):
+                waveform_low = (
+                    detector.fd_response(frequencies_low, waveform_sky_low, params)
+                    * align_time_low
+                )
+                waveform_center = (
+                    detector.fd_response(frequencies_center, waveform_sky_center, params)
+                    * align_time_center
+                )
+                frequencies_low_diff_center = frequencies_low - frequencies_center
+            else:
+                waveform_low = jnp.einsum(
+                    'ij,i->ij',
+                    detector.fd_response(frequencies_low, waveform_sky_low, params),
+                    align_time_low
+                )
+                waveform_center = jnp.einsum(
+                    'ij,i->ij',
+                    detector.fd_response(frequencies_center, waveform_sky_center, params),
+                    align_time_center
+                )
+                frequencies_low_diff_center = frequencies_low - frequencies_center
+                frequencies_low_diff_center = jnp.einsum(
+                    'i,j->ij',
+                    frequencies_low_diff_center,
+                    jnp.ones(shape=(3,))
+                )
 
             r0 = waveform_center / self.waveform_center_ref[detector.name]
             r1 = (waveform_low / self.waveform_low_ref[detector.name] - r0) / (
-                frequencies_low - frequencies_center
+                frequencies_low_diff_center
             )
             match_filter_SNR = jnp.sum(
                 self.A0_array[detector.name] * r0.conj()
@@ -332,22 +388,50 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
             -1j * 2 * jnp.pi * frequencies * (self.epoch + params["t_c"])
         )
         for detector in self.detectors:
-            waveform_dec = (
-                detector.fd_response(frequencies, waveform_sky, params) * align_time
-            )
-            match_filter_SNR = (
-                4
-                * jnp.sum(
-                    (jnp.conj(waveform_dec) * detector.data) / detector.psd * df
-                ).real
-            )
-            optimal_SNR = (
-                4
-                * jnp.sum(
-                    jnp.conj(waveform_dec) * waveform_dec / detector.psd * df
-                ).real
-            )
+            if not isinstance(detector, TriangularGroundBased3G):
+                waveform_dec = (
+                    detector.fd_response(frequencies, waveform_sky, params) * align_time
+                )
+                match_filter_SNR = (
+                    4
+                    * jnp.sum(
+                        (jnp.conj(waveform_dec) * detector.data) / detector.psd * df
+                    ).real
+                )
+                optimal_SNR = (
+                    4
+                    * jnp.sum(
+                        jnp.conj(waveform_dec) * waveform_dec / detector.psd * df
+                    ).real
+                )
+            else:
+                waveform_dec = jnp.einsum(
+                    'ij,i->ij',
+                    detector.fd_response(frequencies, waveform_sky, params),
+                    align_time
+                )
+                psd_inv = jnp.linalg.inv(detector.psd)
+                match_filter_SNR = (
+                    4
+                    * jnp.einsum(
+                        'ij,ijk,ik->',
+                        waveform_dec,
+                        psd_inv,
+                        detector.data.conj()
+                    ).real * df
+                )
+                optimal_SNR = (
+                    4
+                    * jnp.einsum(
+                        'ij,ijk,ik->',
+                        waveform_dec,
+                        psd_inv,
+                        waveform_dec.conj()
+                    ).real * df
+                )
+
             log_likelihood += match_filter_SNR - optimal_SNR / 2
+
         return log_likelihood
 
     @staticmethod
@@ -446,6 +530,50 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
                     * (freqs[f_index] - f_bins_center[i])
                 )
                 * df
+            )
+
+        A0_array = jnp.array(A0_array)
+        A1_array = jnp.array(A1_array)
+        B0_array = jnp.array(B0_array)
+        B1_array = jnp.array(B1_array)
+        return A0_array, A1_array, B0_array, B1_array
+
+    @staticmethod
+    def compute_coefficients_with_corr(data, h_ref, psd, freqs, f_bins, f_bins_center):
+        A0_array = []
+        A1_array = []
+        B0_array = []
+        B1_array = []
+
+        df = freqs[1] - freqs[0]
+        psd_inv = jnp.linalg.inv(psd)
+        data_prod = np.einsum('ij,ijk,ik->i', data, psd_inv, h_ref.conj())
+        self_prod = np.einsum('ij,ijk,ik->i', h_ref, psd_inv, h_ref.conj())
+        for i in range(len(f_bins) - 1):
+            f_index = np.where((freqs >= f_bins[i]) & (freqs < f_bins[i + 1]))[0]
+            A0_array.append(
+                4 * df
+                * np.sum(
+                    data_prod[f_index],
+                )
+            )
+            A1_array.append(
+                4 * df
+                * np.sum(
+                    data_prod[f_index] * (freqs[f_index] - f_bins_center[i])
+                )
+            )
+            B0_array.append(
+                4 * df
+                * np.sum(
+                    self_prod[f_index]
+                )
+            )
+            B1_array.append(
+                4 * df
+                * np.sum(
+                    self_prod[f_index] * (freqs[f_index] - f_bins_center[i])
+                )
             )
 
         A0_array = jnp.array(A0_array)
