@@ -164,6 +164,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         post_trigger_duration: float = 2,
         popsize: int = 100,
         n_loops: int = 2000,
+        ref_params: dict = {},
         **kwargs,
     ) -> None:
         super().__init__(
@@ -182,12 +183,15 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         )
         self.freq_grid_low = freq_grid[:-1]
 
-        print("Finding reference parameters..")
-
-        self.ref_params = self.maximize_likelihood(
-            bounds=bounds, prior=prior, popsize=popsize, n_loops=n_loops
-        )
-        print(f"Reference parameters are {self.ref_params}")
+        if not ref_params:
+            print("No ref_params provided, finding reference parameters..")
+            self.ref_params = self.maximize_likelihood(
+                bounds=bounds, prior=prior, popsize=popsize, n_loops=n_loops
+            )
+            print(f"Reference parameters are {self.ref_params}")
+        else:
+            self.ref_params = ref_params
+            print(f"ref_params provided, which are {self.ref_params}")
 
         print("Constructing reference waveforms..")
 
