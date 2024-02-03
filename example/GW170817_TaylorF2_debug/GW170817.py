@@ -11,7 +11,7 @@ from flowMC.utils.PRNG_keys import initialize_rng_keys
 # jax
 import jax.numpy as jnp
 import jax
-chosen_device = jax.devices()[2]
+chosen_device = jax.devices()[-1]
 jax.config.update("jax_platform_name", "gpu")
 jax.config.update("jax_default_device", chosen_device)
 # others
@@ -260,7 +260,7 @@ jim = Jim(
     use_global=True,
     keep_quantile=0.0,
     train_thinning=10,
-    output_thinning=30,    
+    output_thinning=1,    
     n_loops_maximize_likelihood = 2000,
     local_sampler_arg=local_sampler_arg,
     outdir_name=outdir_name

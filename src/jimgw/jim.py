@@ -65,6 +65,14 @@ class Jim(object):
             adaptive_step_size = adaptive_step_size,
             **kwargs)
         
+        # Use Kaze's autotune
+        # TODO if this is OK, add to hyperparameters (but change name to reflect that it's Kaze's autotune)
+        self.hyperparameters["use_local_autotune"] = False
+        if self.hyperparameters["use_local_autotune"]:
+            print("Jim: Using local autotune")
+            self.local_autotune = local_sampler.mala_sampler_autotune
+            self.Sampler.local_autotune = local_sampler.mala_sampler_autotune
+        
         # TODO move this if OK
         self.Sampler.save_global_samples_training = save_global_samples_training
         

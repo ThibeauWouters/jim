@@ -57,7 +57,7 @@ def plot_ratio_comparison(mass_matrix_1, mass_matrix_2, name_1, name_2, naming, 
     if len(mass_matrix_2.shape) == 2:
         mass_matrix_2 = np.diag(mass_matrix_2)
     
-    name = "comparison_ratios"
+    name = "FIM_comparison_ratios"
     if use_ratio:
         ratio_1 = mass_matrix_1 / mass_matrix_1[0]
         ratio_2 = mass_matrix_2 / mass_matrix_2[0]
@@ -280,7 +280,7 @@ class FisherInformationMatrix:
         
     def get_tuned_mass_matrix(self,
                               clip_left: float = 0,
-                              clip_right: float = 1e-2,
+                              clip_right: float = 1,
                               desired_eps_tc: float = 1e-7):
         
         if self.inverse is None:
@@ -296,13 +296,12 @@ class FisherInformationMatrix:
             print("mass_matrix_diagonal")
             print(mass_matrix_diagonal)
         
-        # TODO implement these properly:
-        self.divide_by_prior_range = False
+        # TODO we actually multiply... Change the name!
         if self.divide_by_prior_range:
             if self.verbose:
                 print("INFO: Dividing by prior range")
             
-            mass_matrix_diagonal = mass_matrix_diagonal / self.prior_range
+            mass_matrix_diagonal = mass_matrix_diagonal * self.prior_range
             
         # Rescale the mass matrix based on t_c
         if desired_eps_tc is not None:

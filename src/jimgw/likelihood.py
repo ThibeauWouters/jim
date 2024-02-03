@@ -188,7 +188,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
             self.ref_params = ref_params
             print("Reference parameters provided:")
             print(self.ref_params)  
-        
+
         else:
             print("Finding reference parameters..")
         
