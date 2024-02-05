@@ -61,9 +61,9 @@ class Jim(object):
 
         flowHMC_params = kwargs.get("flowHMC_params", {})
         model = MaskedCouplingRQSpline(
-            self.Prior.n_dim, self.num_layers, self.hidden_size, self.num_bins, self.rng_key_set[-1]
+            self.Prior.n_dim, self.num_layers, self.hidden_size, self.num_bins, rng_key_set[-1]
         )
-        if len(flowHMC_params) > 0:
+        if len(flowHMC_params) > 0: 
             global_sampler = flowHMC(
                 self.posterior,
                 True,

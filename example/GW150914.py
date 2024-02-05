@@ -11,6 +11,10 @@ import jax.numpy as jnp
 import jax
 
 jax.config.update("jax_enable_x64", True)
+jax.config.update("jax_platform_name", "gpu")
+jax.config.update("jax_default_device", jax.devices()[-1])
+
+from flowMC.utils.postprocessing import plot_summary
 
 ###########################################
 ########## First we grab data #############
@@ -125,5 +129,5 @@ jim = Jim(
 jim.sample(jax.random.PRNGKey(42))
 
 jim.print_summary()
-jim.Sampler.plot_summary("training")
-jim.Sampler.plot_summary("production")
+plot_summary(jim.Sampler, which = "training")
+plot_summary(jim.Sampler, which = "production")
