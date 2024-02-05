@@ -52,7 +52,7 @@ class Jim(object):
         for key, value in self.hyperparameters.items():
             setattr(self, key, value)
 
-        self.rng_key_set = initialize_rng_keys(self.hyperparameters["n_chains"], seed=self.hyperparameters["seed"])
+        rng_key_set = initialize_rng_keys(self.hyperparameters["n_chains"], seed=self.hyperparameters["seed"])
         local_sampler_arg = kwargs.get("local_sampler_arg", {})
 
         local_sampler = MALA(
@@ -79,7 +79,7 @@ class Jim(object):
 
         self.Sampler = Sampler(
             self.Prior.n_dim,
-            self.rng_key_set,
+            rng_key_set,
             None,  # type: ignore
             local_sampler,
             model,
