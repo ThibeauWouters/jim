@@ -3,15 +3,15 @@ from jimgw.jim import Jim
 from jimgw.detector import H1, L1, V1
 from jimgw.likelihood import HeterodynedTransientLikelihoodFD, TransientLikelihoodFD
 from jimgw.waveform import RippleIMRPhenomD, RippleTaylorF2
-from jimgw.prior import Uniform, Powerlaw, Composite 
-from jimgw.fisher_information_matrix import FisherInformationMatrix
+from jimgw.prior import Uniform, PowerLaw, Composite 
+# from jimgw.fisher_information_matrix import FisherInformationMatrix
 # ripple
 # flowmc
 from flowMC.utils.PRNG_keys import initialize_rng_keys
 # jax
 import jax.numpy as jnp
 import jax
-chosen_device = jax.devices()[2]
+chosen_device = jax.devices()[3]
 jax.config.update("jax_platform_name", "gpu")
 jax.config.update("jax_default_device", chosen_device)
 # others
@@ -152,7 +152,7 @@ lambda2_prior = Uniform(0.0, 5000.0, naming=["lambda_2"])
 
 # External parameters
 # dL_prior       = Uniform(0.0, 75.0, naming=["d_L"])
-dL_prior       = Powerlaw(1.0, 75.0, 2.0, naming=["d_L"])
+dL_prior       = PowerLaw(1.0, 75.0, 2.0, naming=["d_L"])
 t_c_prior      = Uniform(-0.1, 0.1, naming=["t_c"])
 phase_c_prior  = Uniform(0.0, 2 * jnp.pi, naming=["phase_c"])
 cos_iota_prior = Uniform(
