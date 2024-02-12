@@ -6,6 +6,7 @@ import json
 import numpy as np
 import corner
 import h5py
+import arviz
 
 NAMING = ['M_c', 'q', 's1_z', 's2_z', 'lambda_1', 'lambda_2', 'd_L', 't_c', 'phase_c', 'cos_iota', 'psi', 'ra', 'sin_dec']
 
@@ -34,7 +35,7 @@ matplotlib_params = {"axes.grid": True,
         "font.serif" : ["Computer Modern Serif"],
         "xtick.labelsize": 16,
         "ytick.labelsize": 16,
-        "axes.labelsize": 16,
+        "axes.labelsize": 32,
         "legend.fontsize": 16,
         "legend.title_fontsize": 16,
         "figure.titlesize": 16}
@@ -63,10 +64,22 @@ def plot_accs(accs, label, name, outdir):
     plt.close()
 
     
-def plot_single_chains(chains, name, outdir):
+def plot_single_chains(chains, labels, savename, subplots_adjust = 3, fs_ticks = 62, fs_labels = 72, linewidth_1d = 4):
     
-    fig = corner.corner(chains, labels = labels, hist_kwargs={'density': True}, **default_corner_kwargs)
-    fig.savefig(f"{outdir}{name}.png", bbox_inches='tight')  
+    hist_kwargs = {'density': True,
+                   "linewidth": linewidth_1d}
+    
+    fig = corner.corner(chains, labels = labels, hist_kwargs=hist_kwargs, **default_corner_kwargs)
+    
+    # Clean up
+    fig.subplots_adjust(right=subplots_adjust,top=subplots_adjust)
+    for ax in fig.get_axes():
+        ax.tick_params(axis='both', labelsize=fs_ticks)
+        # also increase labels fontsize
+        ax.set_xlabel(ax.get_xlabel(), fontsize=fs_labels)
+        ax.set_ylabel(ax.get_ylabel(), fontsize=fs_labels)
+
+    fig.savefig(f"{savename}.png", bbox_inches='tight', dpi = 300)  
     
 def get_chains_GWOSC():
     """Compare to the HDF5 file as well"""
@@ -99,12 +112,17 @@ def get_chains_GWOSC():
         
     return samples
 
-def plot_chains(chains_1, chains_2, labels):
+def plot_chains(chains_1, chains_2, labels, ls = 22):
     
     fig = corner.corner(chains_1, labels = labels, hist_kwargs={'density': True}, **default_corner_kwargs)
     default_corner_kwargs["color"] = "red"
     corner.corner(chains_2, fig = fig, labels = labels, hist_kwargs={'density': True}, **default_corner_kwargs)
+    
+    # Clean up the plot
+    fig.subplots_adjust(right=1.5,top=1.5)
     fig.savefig(f"./outdir/chains_jim_gwosc.png", bbox_inches='tight')  
+    for ax in fig.get_axes():
+        ax.tick_params(axis='both', labelsize=ls)
     plt.close()
 
 
@@ -196,14 +214,33 @@ def get_chains_bilby(fake_lambdas = False):
     
     
 def main():
-    jim_chains = get_jim_chains_from_file("./outdir/results_production.npz", drop_lambdas = True)
-    bilby_result = get_chains_bilby(fake_lambdas = False)
-    plot_chains(jim_chains, bilby_result, labels_no_lambdas)
+    jim_chains = get_jim_chains_from_file("/home/thibeau.wouters/public_html/jim_runs/GW170817_TaylorF2/GW170817_TaylorF2/outdir/results_production.npz")
     
+    # sanity check
+    d_L = jim_chains[:, 6]
+    med = np.median(d_L)
+    low, high = arviz.hdi(d_L, hdi_prob=0.9)
+    low = med - low
+    high = high - med
     
+    nb_round = 2
+    low, med, high = round(low, nb_round), round(med, nb_round), round(high, nb_round)
+    
+    print(f"Median: {med}- {low} + {high}")
+    
+    idx_list = [0, 1, 4, 5, 6] + [9, 10, 11, 12]
+    jim_chains = jim_chains[:, idx_list]
+    my_labels = [labels[i] for i in idx_list]
+
+    plot_single_chains(jim_chains, my_labels, savename="./figures/posterior")
+    plot_single_chains(jim_chains, my_labels, savename="/home/thibeau.wouters/public_html/jim_plots/GW170817_TaylorF2/GW170817_posterior")
+    
+    ### TODO plot other chains as well from trusted sources e.g. bilby etc
+    # bilby_result = get_chains_bilby(fake_lambdas = False)
     # gwosc_chains = get_chains_GWOSC()
     # plot_chains(jim_chains, gwosc_chains)
     
     
 if __name__ == "__main__":
     main()
+    print("DONE")

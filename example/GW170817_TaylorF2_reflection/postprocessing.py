@@ -50,6 +50,13 @@ labels_gwosc = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$\Lambda_1
 labels_no_lambdas = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$d_{\rm{L}}/{\rm Mpc}$',
             r'$t_c$', r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
 
+def load_accs(filename):
+    data = np.load(filename)
+    local_accs = data['local_accs']
+    global_accs = data['global_accs']
+    
+    return local_accs, global_accs
+
 def plot_accs(accs, label, name, outdir):
     
     eps = 1e-3
@@ -118,7 +125,10 @@ def ms_to_chirp_mass(m1, m2):
     
     
     
-def get_jim_chains_from_file(filename, remove_non_gwosc = False, remove_non_bilby = False, drop_lambdas = False):
+def get_jim_chains_from_file(filename, 
+                             remove_non_gwosc = False, 
+                             remove_non_bilby = False, 
+                             drop_lambdas = False):
     
     data = np.load(filename)
     chains = data['chains']
@@ -196,9 +206,16 @@ def get_chains_bilby(fake_lambdas = False):
     
     
 def main():
-    jim_chains = get_jim_chains_from_file("./outdir/results_production.npz", drop_lambdas = True)
-    bilby_result = get_chains_bilby(fake_lambdas = False)
-    plot_chains(jim_chains, bilby_result, labels_no_lambdas)
+    jim_chains = get_jim_chains_from_file("./outdir/results_production.npz")
+    plot_single_chains(jim_chains, "results", "./outdir/")
+    
+    local_accs, global_accs = load_accs("./outdir/results_production.npz")
+    local_accs = np.mean(local_accs, axis=0)
+    global_accs = np.mean(global_accs, axis=0)
+    print(np.shape(local_accs))
+    print(np.shape(global_accs))
+    plot_accs(local_accs, "local_accs", "local_accs", "./outdir/")
+    plot_accs(global_accs, "global_accs", "global_accs", "./outdir/")
     
     
     # gwosc_chains = get_chains_GWOSC()

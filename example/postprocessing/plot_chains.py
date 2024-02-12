@@ -63,10 +63,10 @@ def plot_accs(accs, label, name, outdir):
     plt.close()
 
     
-def plot_single_chains(chains, name, outdir):
+def plot_single_chains(chains, labels, savename):
     
     fig = corner.corner(chains, labels = labels, hist_kwargs={'density': True}, **default_corner_kwargs)
-    fig.savefig(f"{outdir}{name}.png", bbox_inches='tight')  
+    fig.savefig(f"{savename}.png", bbox_inches='tight', dpi = 300)  
     
 def get_chains_GWOSC():
     """Compare to the HDF5 file as well"""
@@ -196,14 +196,8 @@ def get_chains_bilby(fake_lambdas = False):
     
     
 def main():
-    jim_chains = get_jim_chains_from_file("./outdir/results_production.npz", drop_lambdas = True)
-    bilby_result = get_chains_bilby(fake_lambdas = False)
-    plot_chains(jim_chains, bilby_result, labels_no_lambdas)
-    
-    
-    # gwosc_chains = get_chains_GWOSC()
-    # plot_chains(jim_chains, gwosc_chains)
-    
+    jim_chains = get_jim_chains_from_file("../GW170817_TaylorF2/outdir/results_production.npz", drop_lambdas = False)
+    plot_single_chains(jim_chains, labels, savename="../GW170817_TaylorF2/outdir/results")
     
 if __name__ == "__main__":
     main()
