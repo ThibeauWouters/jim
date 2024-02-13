@@ -1,11 +1,11 @@
 import os
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.75"
-my_device = '0'
+my_device = '1'
 os.environ['CUDA_VISIBLE_DEVICES'] = my_device
 print(f"Running on GPU {my_device}")
-import psutil
-p = psutil.Process()
-p.cpu_affinity([0])
+# import psutil
+# p = psutil.Process()
+# p.cpu_affinity([0])
 import shutil
 import sys
 import json
@@ -16,10 +16,10 @@ from jimgw.single_event.detector import H1, L1, V1, Detector
 from jimgw.single_event.likelihood import HeterodynedTransientLikelihoodFD, TransientLikelihoodFD
 from jimgw.single_event.waveform import RippleTaylorF2
 from jimgw.prior import Uniform, PowerLaw, AlignedSpin, Composite
+from flowMC.utils.postprocessing import plot_summary
 # jax
 import jax.numpy as jnp
 import jax
-import jax.profiler
 # ripple
 from ripple import Mc_eta_to_ms
 # get available jax devices
@@ -52,9 +52,8 @@ SNR_THRESHOLD = 1e-40 # skip injections with SNR below this threshold
 waveform_approximant = "TaylorF2" # which waveform approximant to use, either TaylorF2 or IMRPhenomD_NRTidalv2
 OUTDIR = f"./outdir_{waveform_approximant}/"
 
-smart_initial_guess = False
+smart_initial_guess = True
 clean_outdir = False
-
 
 print(f"Running with smart_initial_guess = {smart_initial_guess}")
 
@@ -556,10 +555,10 @@ def body(N, outdir, load_existing_config = False):
                                 dL_samples, # dL, 6
                                 merged_tc, # t_c, 7
                                 uniform_samples[:,5], # phase_c, 8
-                                merged_iota, # cos_iota, 9
+                                jnp.cos(merged_iota), # cos_iota, 9
                                 uniform_samples[:,6], # psi, 10
                                 merged_ra, # ra, 11
-                                merged_dec, # sin_dec, 12
+                                jnp.sin(merged_dec), # sin_dec, 12
                                 ]).T
 
         # Make a corner plot
@@ -574,10 +573,10 @@ def body(N, outdir, load_existing_config = False):
         fig.savefig(outdir + "initial_guess_corner.png", bbox_inches='tight')
     else:
         initial_guess = jnp.array([])
-    
+        
     ### Finally, do the sampling
     jim.sample(key, initial_guess = initial_guess)
-
+        
     # === Show results, save output ===
 
     ### Summary to screen:
@@ -613,18 +612,21 @@ def body(N, outdir, load_existing_config = False):
     local_accs, global_accs = state["local_accs"], state["global_accs"]
     local_accs = jnp.mean(local_accs, axis=0)
     global_accs = jnp.mean(global_accs, axis=0)
-    utils.plot_accs(local_accs, "training", "local_accs_training", outdir)
-    utils.plot_accs(global_accs, "training", "global_accs_training", outdir)
+    # utils.plot_accs(local_accs, "training", "local_accs_training", outdir)
+    # utils.plot_accs(global_accs, "training", "global_accs_training", outdir)
     
     # Production plots
     state = jim.Sampler.get_sampler_state(training = False)
     chains, log_prob, local_accs, global_accs = state["chains"], state["log_prob"], state["local_accs"], state["global_accs"]
     local_accs = jnp.mean(local_accs, axis=0)
     global_accs = jnp.mean(global_accs, axis=0)
-    utils.plot_accs(local_accs, "production", "local_accs_production", outdir)
-    utils.plot_accs(global_accs, "production", "global_accs_production", outdir)
-    truths = true_param.values()
-    utils.plot_chains(chains, truths, "chains", outdir)
+    # utils.plot_accs(local_accs, "production", "local_accs_production", outdir)
+    # utils.plot_accs(global_accs, "production", "global_accs_production", outdir)
+    # truths = np.array([p[key] for key in naming if key != "gmst"])
+    # utils.plot_chains(chains, truths, "chains", outdir)
+    
+    plot_summary(jim.Sampler, training = True)
+    plot_summary(jim.Sampler, training = False)
 
     # TODO implement this again
     # print("Saving the jim hyperparameters")
@@ -633,11 +635,6 @@ def body(N, outdir, load_existing_config = False):
     print("Saving the NF")
     jim.Sampler.save_flow(outdir + "nf_model")
 
-    # Remove in order to hopefully reduce memory?
-    jim = None
-    gc.collect()
-    print("INJECTION RECOVERY FINISHED SUCCESSFULLY")
-    
 def main():
     
     ## Normal, new injection:
@@ -650,9 +647,10 @@ def main():
     
     # ### Rerun a specific injection
     # body("144", outdir = OUTDIR, load_existing_config = True) 
-    body("144_original", outdir = OUTDIR, load_existing_config = True) 
+    # body("144_original", outdir = OUTDIR, load_existing_config = True) 
     
-    # jax.profiler.save_device_memory_profile("memory.prof")
+    
+    body("144", outdir = OUTDIR, load_existing_config = True) 
     
 if __name__ == "__main__":
     start = time.time()

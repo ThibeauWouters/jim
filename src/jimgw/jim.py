@@ -1,6 +1,8 @@
 from jaxtyping import Array, Float, PRNGKeyArray
 import jax
 import jax.numpy as jnp
+import numpy as np
+import json
 
 from flowMC.sampler.Sampler import Sampler
 from flowMC.sampler.MALA import MALA
@@ -204,6 +206,19 @@ class Jim(object):
 
         chains = self.Prior.transform(self.Prior.add_name(chains.transpose(2, 0, 1)))
         return chains
+    
+    def save_hyperparameters(self):
+        
+        # Convert step_size to list for JSON formatting
+        if "step_size" in self.hyperparameters["local_sampler_arg"].keys():
+            self.hyperparameters["local_sampler_arg"]["step_size"] = np.asarray(self.hyperparameters["local_sampler_arg"]["step_size"]).tolist()
+        
+        hyperparameters_dict = {"flowmc": self.Sampler.hyperparameters,
+                                "jim": self.hyperparameters}
+        
+        name = self.Sampler.outdir_name + "hyperparams.json"
+        with open(name, 'w') as file:
+            json.dump(hyperparameters_dict, file)
 
     def plot(self):
         pass
