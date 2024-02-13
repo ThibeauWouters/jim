@@ -1,6 +1,8 @@
 import os
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.50"
-# os.environ['CUDA_VISIBLE_DEVICES'] = '3'
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.75"
+my_device = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = my_device
+print(f"Running on GPU {my_device}")
 import psutil
 p = psutil.Process()
 p.cpu_affinity([0])
@@ -10,7 +12,7 @@ import json
 from scipy.interpolate import interp1d
 # jim
 from jimgw.jim import Jim
-from jimgw.single_event.detector import H1, L1, V1
+from jimgw.single_event.detector import H1, L1, V1, Detector
 from jimgw.single_event.likelihood import HeterodynedTransientLikelihoodFD, TransientLikelihoodFD
 from jimgw.single_event.waveform import RippleTaylorF2
 from jimgw.prior import Uniform, PowerLaw, AlignedSpin, Composite
@@ -22,12 +24,12 @@ import jax.profiler
 from ripple import Mc_eta_to_ms
 # get available jax devices
 nb_devices = len(jax.devices())
-print(f"GPU available? {nb_devices} devices available, using final device from this list")
+print(f"GPU available? {nb_devices} devices available")
 print(jax.devices())    
 chosen_device = jax.devices()[-1]
 print(f"chosen_device: {chosen_device}")
-jax.config.update("jax_platform_name", "gpu")
-jax.config.update("jax_default_device", chosen_device)
+# jax.config.update("jax_platform_name", "gpu")
+# jax.config.update("jax_default_device", chosen_device)
 # others
 import numpy as np
 jax.config.update("jax_enable_x64", True)
@@ -38,6 +40,7 @@ import matplotlib.pyplot as plt
 import time
 import gc
 
+from jaxtyping import Float
 import plotting_utils as utils
 
 ####################
@@ -49,13 +52,77 @@ SNR_THRESHOLD = 1e-40 # skip injections with SNR below this threshold
 waveform_approximant = "TaylorF2" # which waveform approximant to use, either TaylorF2 or IMRPhenomD_NRTidalv2
 OUTDIR = f"./outdir_{waveform_approximant}/"
 
+smart_initial_guess = False
+clean_outdir = False
+
+
+print(f"Running with smart_initial_guess = {smart_initial_guess}")
+
+### 
+### UTILITY FUNCTIONALITIES
+###
+
+def reflect_sky_location(
+    gmst: Float,
+    detectors: list[Detector],
+    ra: Float,
+    dec: Float,
+    tc: Float,
+    iota: Float
+    ) -> tuple[Float, Float, Float]:
+
+    assert len(detectors) == 3, "This reflection only holds for a 3-detector network"
+
+    # convert tc to radian
+    tc_rad = tc / (24 * 60 * 60) * 2 * jnp.pi
+
+    # source location in cartesian coordinates
+    # with the geocentric frame, thus the shift in ra by gmst
+    v = jnp.array([jnp.cos(dec) * jnp.cos(ra - gmst - tc_rad),
+                   jnp.cos(dec) * jnp.sin(ra - gmst - tc_rad),
+                   jnp.sin(dec)])
+
+    # construct the detector plane
+    # fetch the detectors' locations
+    x, y, z = detectors[0].vertex, detectors[1].vertex, detectors[2].vertex
+    # vector normal to the detector plane
+    n = jnp.cross(y - x, z - x)
+    # normalize the vector
+    nhat = n / jnp.sqrt(jnp.dot(n, n))
+    # parametrize v as v = v_n * nhat + v_p, where nhat * v_p = 0
+    v_n = jnp.dot(v, nhat)
+    v_p = v - v_n * nhat
+    # get the plan-reflect location
+    v_ref = -v_n * nhat + v_p
+    # convert back to ra, dec
+    # adjust ra_prime so that it is in [0, 2pi)
+    # i.e., negative values are map to [pi, 2pi)
+    ra_prime = jnp.arctan2(v_ref[1], v_ref[0])
+    ra_prime = ra_prime - (jnp.sign(ra_prime) - 1) * jnp.pi
+    ra_prime = ra_prime + gmst + tc_rad  # add back the gps time and tc
+    ra_prime = jnp.mod(ra_prime, 2 * jnp.pi)
+    dec_prime = jnp.arcsin(v_ref[2])
+
+    # calculate the time delay
+    # just pick the first detector
+    old_time_delay = detectors[0].delay_from_geocenter(ra, dec, gmst + tc_rad)
+    new_time_delay = detectors[0].delay_from_geocenter(ra_prime, dec_prime,
+                                                       gmst + tc_rad)
+    tc_prime = tc + old_time_delay - new_time_delay
+    
+    # Also flip iota
+    iota_prime = jnp.pi - iota
+
+    return ra_prime, dec_prime, tc_prime, iota_prime
+
+
 ### Script hyperparameters
 
 
 HYPERPARAMETERS = {
     "flowmc": 
         {
-            "n_loop_training": 20, # 130 
+            "n_loop_training": 200, # 130 
             "n_loop_production": 20, # 50
             "n_local_steps": 20, # 200
             "n_global_steps": 200, # 200
@@ -230,14 +297,13 @@ def body(N, outdir, load_existing_config = False):
         for key, value in PRIOR.items():
             bounds.append(value)
         bounds = np.asarray(bounds)
+        # Change the prior ranges to be 1D values indicating the width of the prior
+        prior_ranges = jnp.array(bounds[:, 1] - bounds[:, 0])
         
         # # TODO I just move on anyway
         network_snr = 14
         # if network_snr < SNR_THRESHOLD:
         #     print(f"Network SNR is less than {SNR_THRESHOLD}, generating new parameters")
-            
-        
-
         
     print("Injecting signals")
     waveform = RippleTaylorF2(f_ref=config["fmin"])
@@ -412,12 +478,122 @@ def body(N, outdir, load_existing_config = False):
         **hyperparameters
     )
     key = jax.random.PRNGKey(24)
-    jim.sample(key)
+    
+    ref_params = true_param
+    n_dim = len(prior_list)
+    n_chains = hyperparameters["n_chains"]
+    if smart_initial_guess:
+        print("Going to initialize the walkers")
+
+        # Fix the indices
+        tc_index = 7
+        iota_index = 9
+        ra_index = 11
+        dec_index = 12
+        special_idx = [0, 6, tc_index, iota_index, ra_index, dec_index]
+        other_idx = [i for i in range(n_dim) if i not in special_idx]
+        
+        # Start new PRNG key
+        my_seed = 1234556
+        my_key = jax.random.PRNGKey(my_seed)
+        my_key, subkey = jax.random.split(my_key)
+
+        # Mc
+        z = jax.random.normal(subkey, shape = (int(n_chains),))
+        mc_mean = ref_params["M_c"]
+        mc_std = 0.1 
+        mc_samples = mc_mean + mc_std * z
+
+        ### Sample for ra, dec, tc, iota
+        # TODO make less cumbersome here!
+        assert n_chains % 2 == 0, "n_chains must be multiple of two"
+        n_chains_half = int(n_chains // 2) 
+        my_key, subkey = jax.random.split(my_key)
+        z = jax.random.normal(subkey, shape = (int(n_chains_half), 4))
+        my_key, subkey = jax.random.split(my_key)
+        z_prime = jax.random.normal(subkey, shape = (int(n_chains_half), 4))
+        sky_std = 0.1 * jnp.array([prior_ranges[ra_index], prior_ranges[dec_index], prior_ranges[tc_index], prior_ranges[iota_index]])
+
+        # True sky location
+        ra, dec, tc, iota = ref_params["ra"], ref_params["dec"], ref_params["t_c"], ref_params["iota"]
+        sky_means = jnp.array([ra, dec, tc, iota])
+        sky_samples = sky_means + z * sky_std
+        ra_samples, dec_samples, tc_samples, iota_samples = sky_samples[:,0], sky_samples[:,1], sky_samples[:,2], sky_samples[:,3]
+
+        # Reflected sky location
+        ra_prime, dec_prime, tc_prime, iota_prime = reflect_sky_location(gmst, [H1, L1, V1], ra, dec, tc, iota)
+        sky_means_prime = jnp.array([ra_prime, dec_prime, tc_prime, iota_prime])
+        sky_samples_prime = sky_means_prime + sky_std * z_prime
+        ra_samples_prime, dec_samples_prime, tc_samples_prime, iota_samples_prime = sky_samples_prime[:,0], sky_samples_prime[:,1], sky_samples_prime[:,2], sky_samples_prime[:,3]
+
+        # Merge original and reflected samples
+        merged_ra = jnp.concatenate([ra_samples, ra_samples_prime], axis=0)
+        merged_dec = jnp.concatenate([dec_samples, dec_samples_prime], axis=0)
+        merged_tc = jnp.concatenate([tc_samples, tc_samples_prime], axis=0)
+        merged_iota = jnp.concatenate([iota_samples, iota_samples_prime], axis=0)
+
+        # dL samples with powerlaw
+        my_key, subkey = jax.random.split(my_key)
+        dL_samples = dL_prior.sample(subkey, n_chains)
+        # Convert to jnp array
+        dL_samples = jnp.array(dL_samples["d_L"])
+
+        # Rest of samples is uniform
+        uniform_samples = jax.random.uniform(subkey, shape = (int(n_chains), n_dim - 6))
+        for i, idx in enumerate(other_idx):
+            # Get the relevant shift for this parameter, param is fetched by idx
+            shift = prior_ranges[idx]
+            # At this unifor/m samples, set the value using the shifts
+            uniform_samples = uniform_samples.at[:,i].set(bounds[idx, 0] + uniform_samples[:,i] * shift)
+
+        # Now build up the initial guess
+        initial_guess = jnp.array([mc_samples, # Mc, 0
+                                uniform_samples[:,0], # q, 1
+                                uniform_samples[:,1], # chi1, 2
+                                uniform_samples[:,2], # chi2, 3
+                                uniform_samples[:,3], # lambda1, 4
+                                uniform_samples[:,4], # lambda2, 5
+                                dL_samples, # dL, 6
+                                merged_tc, # t_c, 7
+                                uniform_samples[:,5], # phase_c, 8
+                                merged_iota, # cos_iota, 9
+                                uniform_samples[:,6], # psi, 10
+                                merged_ra, # ra, 11
+                                merged_dec, # sin_dec, 12
+                                ]).T
+
+        # Make a corner plot
+        print("Going to plot the walkers")
+        initial_guess_numpy = np.array(initial_guess)
+        ref_params["iota"] = jnp.cos(ref_params["iota"])
+        ref_params["dec"] = jnp.sin(ref_params["dec"])
+        truths = np.array([ref_params[p] for p in ref_params if p != "gmst"])
+        print("Plotting the initial guess")
+        fig = corner.corner(initial_guess_numpy, labels = utils.labels_with_tc, truths = truths, hist_kwargs={'density': True}, **utils.default_corner_kwargs)
+        # Save
+        fig.savefig(outdir + "initial_guess_corner.png", bbox_inches='tight')
+    else:
+        initial_guess = jnp.array([])
+    
+    ### Finally, do the sampling
+    jim.sample(key, initial_guess = initial_guess)
 
     # === Show results, save output ===
 
     ### Summary to screen:
     jim.print_summary()
+    
+    if clean_outdir:
+        print("Cleaning outdir")
+        for filename in os.listdir(outdir):
+            file_path = os.path.join(outdir, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+            except Exception as e:
+                print('Failed to delete %s. Reason: %s' % (file_path, e))
 
     # jim.Sampler.plot_summary("training")
     # jim.Sampler.plot_summary("production")
@@ -473,7 +649,8 @@ def main():
     # body(N, outdir=OUTDIR) # regular, computing on the fly
     
     # ### Rerun a specific injection
-    body(144, outdir = OUTDIR, load_existing_config = True) 
+    # body("144", outdir = OUTDIR, load_existing_config = True) 
+    body("144_original", outdir = OUTDIR, load_existing_config = True) 
     
     # jax.profiler.save_device_memory_profile("memory.prof")
     

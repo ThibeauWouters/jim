@@ -40,6 +40,9 @@ plt.rcParams.update(matplotlib_params)
 labels_results_plot = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$\Lambda_1$', r'$\Lambda_2$', r'$d_{\rm{L}}/{\rm Mpc}$',
             r'$t_c$', r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
 
+labels_with_tc = [r'$M_c/M_\odot$', r'$q$', r'$\chi_1$', r'$\chi_2$', r'$\Lambda$', r'$\delta\Lambda$', r'$d_{\rm{L}}/{\rm Mpc}$',
+               r'$t_c$', r'$\phi_c$', r'$\iota$', r'$\psi$', r'$\alpha$', r'$\delta$']
+
 def plot_accs(accs, label, name, outdir):
     
     eps = 1e-3
@@ -56,6 +59,10 @@ def plot_accs(accs, label, name, outdir):
 def plot_chains(chains, truths, name, outdir, labels = labels_results_plot):
     
     chains = np.array(chains)
+    
+    # Check if 3D, then reshape
+    if len(np.shape(chains)) == 3:
+        chains = chains.reshape(-1, 13)
     
     print("np.shape(chains)")
     print(np.shape(chains))
@@ -109,12 +116,21 @@ def load_true_params_from_config(outdir):
         config = json.load(f)
     true_params = np.array([config[key] for key in NAMING])
     
+    # Convert cos_iota and sin_dec to iota and dec
+    cos_iota_index = NAMING.index('cos_iota')
+    sin_dec_index = NAMING.index('sin_dec')
+    true_params[cos_iota_index] = np.arccos(true_params[cos_iota_index])
+    true_params[sin_dec_index] = np.arcsin(true_params[sin_dec_index])
+    
     return true_params
 
 def main():
     # plot_chains_from_file("./outdir_TaylorF2/injection_144/")
-    # plot_accs_from_file("./outdir_TaylorF2/injection_144/")
-    plot_chains_from_file("/home/thibeau.wouters/jim/example/GW170817_TaylorF2/outdir/")
+    plot_accs_from_file("./outdir_TaylorF2/injection_144/")
+    plot_chains_from_file("./outdir_TaylorF2/injection_144/", load_true_params=True)
+    
+    plot_accs_from_file("./outdir_TaylorF2/injection_144_original/")
+    plot_chains_from_file("./outdir_TaylorF2/injection_144_original/", load_true_params=True)
     
 if __name__ == "__main__":
     main()
