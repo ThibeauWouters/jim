@@ -15,7 +15,7 @@ from jimgw.jim import Jim
 from jimgw.single_event.detector import H1, L1, V1, Detector
 from jimgw.single_event.likelihood import HeterodynedTransientLikelihoodFD, TransientLikelihoodFD
 from jimgw.single_event.waveform import RippleTaylorF2
-from jimgw.prior import Uniform, PowerLaw, AlignedSpin, Composite
+from jimgw.prior import Uniform, Composite
 from flowMC.utils.postprocessing import plot_summary
 # jax
 import jax.numpy as jnp
@@ -52,8 +52,8 @@ SNR_THRESHOLD = 1e-40 # skip injections with SNR below this threshold
 waveform_approximant = "TaylorF2" # which waveform approximant to use, either TaylorF2 or IMRPhenomD_NRTidalv2
 OUTDIR = f"./outdir_{waveform_approximant}/"
 
-smart_initial_guess = True
-clean_outdir = False
+smart_initial_guess = False
+ref_params_equals_true_params = True # whether to search for the true parameters or the reflected ones
 
 print(f"Running with smart_initial_guess = {smart_initial_guess}")
 
@@ -121,11 +121,11 @@ def reflect_sky_location(
 HYPERPARAMETERS = {
     "flowmc": 
         {
-            "n_loop_training": 200, # 130 
-            "n_loop_production": 20, # 50
-            "n_local_steps": 20, # 200
-            "n_global_steps": 200, # 200
-            "n_epochs": 50, # 100
+            "n_loop_training": 130,
+            "n_loop_production": 20,
+            "n_local_steps": 200,
+            "n_global_steps": 200,
+            "n_epochs": 100,
             "n_chains": 1000, 
             "learning_rate": 0.001, 
             "max_samples": 50000, 
@@ -140,7 +140,7 @@ HYPERPARAMETERS = {
             "n_sample_max": 10000, 
             "precompile": False, 
             "verbose": False, 
-            "outdir_name": OUTDIR
+            "outdir": OUTDIR
         }, 
     "jim": 
         {
@@ -449,6 +449,13 @@ def body(N, outdir, load_existing_config = False):
     print("Finished prior setup")
 
     print("Initializing likelihood")
+    if ref_params_equals_true_params:
+        ref_params = true_param
+        print("ref_params equals true_params")
+    else:
+        ref_params = None
+        print("ref_params is None")
+
     likelihood = HeterodynedTransientLikelihoodFD(
         ifos,
         prior=complete_prior,
@@ -458,13 +465,13 @@ def body(N, outdir, load_existing_config = False):
         trigger_time=config["trigger_time"],
         duration=config["duration"],
         post_trigger_duration=config["post_trigger_duration"],
-        ref_params=true_param
+        ref_params=ref_params
         )
 
     mass_matrix = jnp.eye(len(prior_list))
     for idx, prior in enumerate(prior_list):
         mass_matrix = mass_matrix.at[idx, idx].set(prior.xmax - prior.xmin) # fetch the prior range
-    local_sampler_arg = {'step_size': mass_matrix * 1e-4} # set the step size to be 0.3% of the prior range
+    local_sampler_arg = {'step_size': mass_matrix * 1e-5} # 
 
     hyperparameters["local_sampler_arg"] = local_sampler_arg
     
@@ -482,7 +489,7 @@ def body(N, outdir, load_existing_config = False):
     n_dim = len(prior_list)
     n_chains = hyperparameters["n_chains"]
     if smart_initial_guess:
-        print("Going to initialize the walkers")
+        print("Going to initialize the walkers with the smart initial guess")
 
         # Fix the indices
         tc_index = 7
@@ -493,7 +500,7 @@ def body(N, outdir, load_existing_config = False):
         other_idx = [i for i in range(n_dim) if i not in special_idx]
         
         # Start new PRNG key
-        my_seed = 1234556
+        my_seed = 123456
         my_key = jax.random.PRNGKey(my_seed)
         my_key, subkey = jax.random.split(my_key)
 
@@ -544,6 +551,12 @@ def body(N, outdir, load_existing_config = False):
             shift = prior_ranges[idx]
             # At this unifor/m samples, set the value using the shifts
             uniform_samples = uniform_samples.at[:,i].set(bounds[idx, 0] + uniform_samples[:,i] * shift)
+            
+        print("ra, dec, tc, iota")
+        print(ra, dec, tc, iota)
+        
+        print("ra_prime, dec_prime, tc_prime, iota_prime")
+        print(ra_prime, dec_prime, tc_prime, iota_prime)
 
         # Now build up the initial guess
         initial_guess = jnp.array([mc_samples, # Mc, 0
@@ -555,12 +568,15 @@ def body(N, outdir, load_existing_config = False):
                                 dL_samples, # dL, 6
                                 merged_tc, # t_c, 7
                                 uniform_samples[:,5], # phase_c, 8
-                                jnp.cos(merged_iota), # cos_iota, 9
+                                jnp.cos(merged_iota), # cos_iota, 9, jnp.cos(merged_iota)
                                 uniform_samples[:,6], # psi, 10
                                 merged_ra, # ra, 11
                                 jnp.sin(merged_dec), # sin_dec, 12
                                 ]).T
-
+        
+        small_eps = 1e-4 # to avoid being clipped right at the edges, which still gives -inf likelihood
+        initial_guess = jnp.clip(initial_guess, prior_low + small_eps, prior_high - small_eps)
+        
         # Make a corner plot
         print("Going to plot the walkers")
         initial_guess_numpy = np.array(initial_guess)
@@ -571,6 +587,9 @@ def body(N, outdir, load_existing_config = False):
         fig = corner.corner(initial_guess_numpy, labels = utils.labels_with_tc, truths = truths, hist_kwargs={'density': True}, **utils.default_corner_kwargs)
         # Save
         fig.savefig(outdir + "initial_guess_corner.png", bbox_inches='tight')
+        
+        # Save the samples as well:
+        np.savez(outdir + "initial_guess.npz", initial_guess = initial_guess_numpy)
     else:
         initial_guess = jnp.array([])
         
@@ -582,17 +601,6 @@ def body(N, outdir, load_existing_config = False):
     ### Summary to screen:
     jim.print_summary()
     
-    if clean_outdir:
-        print("Cleaning outdir")
-        for filename in os.listdir(outdir):
-            file_path = os.path.join(outdir, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)
-            except Exception as e:
-                print('Failed to delete %s. Reason: %s' % (file_path, e))
 
     # jim.Sampler.plot_summary("training")
     # jim.Sampler.plot_summary("production")
@@ -625,8 +633,8 @@ def body(N, outdir, load_existing_config = False):
     # truths = np.array([p[key] for key in naming if key != "gmst"])
     # utils.plot_chains(chains, truths, "chains", outdir)
     
-    plot_summary(jim.Sampler, training = True)
-    plot_summary(jim.Sampler, training = False)
+    # plot_summary(jim.Sampler, training = True)
+    # plot_summary(jim.Sampler, training = False)
 
     # TODO implement this again
     # print("Saving the jim hyperparameters")
