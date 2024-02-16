@@ -53,7 +53,7 @@ waveform_approximant = "TaylorF2" # which waveform approximant to use, either Ta
 OUTDIR = f"./outdir_{waveform_approximant}/"
 
 smart_initial_guess = False
-ref_params_equals_true_params = True # whether to search for the true parameters or the reflected ones
+ref_params_equals_true_params = False # whether to search for the true parameters or the reflected ones
 
 print(f"Running with smart_initial_guess = {smart_initial_guess}")
 

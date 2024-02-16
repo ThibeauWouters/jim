@@ -59,7 +59,7 @@ use_lambda_tildes = False # whether to use lambda tildes instead of individual c
 duration_with_lalsim = False # TODO check with Peter whether this is OK/useful?
 waveform_approximant = "TaylorF2" # which waveform approximant to use, either TaylorF2 or IMRPhenomD_NRTidalv2
 print(f"Waveform approximant: {waveform_approximant}")
-OUTDIR = f"./outdir_{waveform_approximant}/"
+OUTDIR = f"./outdir/"
 # load_existing_config = True # whether to load an existing config file or generate a new one on the fly
 
 ### Script hyperparameters
@@ -291,7 +291,6 @@ def generate_config(prior_low: np.array,
         'duration': 256,
         'fmin': 20,
         'ifos': ['H1', 'L1', 'V1'],
-        'no_noise': no_noise,
         'outdir' : output_path
     }
     
@@ -494,8 +493,6 @@ def body(N, outdir, load_existing_config = False):
         h_sky = waveform(freqs, true_params)
         
         ## TODO what PSD is this?
-        
-        jim_data_dir = "/home/thibeau.wouters/jim/data/"
         
         print("Injecting signal. No noise is set to: ", no_noise)
         key, subkey = jax.random.split(jax.random.PRNGKey(config["seed"] + 1234))

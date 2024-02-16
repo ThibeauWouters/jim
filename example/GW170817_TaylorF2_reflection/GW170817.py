@@ -1,6 +1,6 @@
 import os 
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.75"
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 import psutil
 p = psutil.Process()
 p.cpu_affinity([0])
@@ -18,9 +18,6 @@ from flowMC.utils.postprocessing import plot_summary
 import jax.numpy as jnp
 import jax
 print(jax.devices())
-# chosen_device = jax.devices()[1]
-# jax.config.update("jax_platform_name", "gpu")
-# jax.config.update("jax_default_device", chosen_device)
 # others
 import time
 import numpy as np
@@ -211,7 +208,7 @@ lambda_1_prior = Uniform(0.0, 5000.0, naming=["lambda_1"])
 lambda_2_prior = Uniform(0.0, 5000.0, naming=["lambda_2"])
 
 # External parameters
-dL_prior       = Uniform(0.0, 75.0, naming=["d_L"])
+dL_prior       = Uniform(1.0, 75.0, naming=["d_L"])
 t_c_prior      = Uniform(-0.1, 0.1, naming=["t_c"])
 phase_c_prior  = Uniform(0.0, 2 * jnp.pi, naming=["phase_c"])
 cos_iota_prior = Uniform(
@@ -266,21 +263,6 @@ prior_ranges = jnp.array([bound[1] - bound[0] for bound in bounds])
 
 ### Create likelihood object
 
-# ref_params = {'M_c': 1.19754357, 
-#               'eta': 0.24984541, 
-#               's1_z': -0.00429651, 
-#               's2_z': 0.00470304, 
-#               'lambda_1': 1816.51300368, 
-#               'lambda_2': 0.10161503, 
-#               'd_L': 10.87770389, 
-#               't_c': 0.00864911, 
-#               'phase_c': 4.33436689, 
-#               'iota': 1.59216065, 
-#               'psi': 1.69112445, 
-#               'ra': 5.08658471, 
-#               'dec': 0.47136332
-# }
-
 ref_params = {'M_c': 1.19754357, 
               'eta': 0.24984541, 
               's1_z': -0.00429651, 
@@ -290,10 +272,10 @@ ref_params = {'M_c': 1.19754357,
               'd_L': 10.87770389, 
               't_c': 0.00864911, 
               'phase_c': 4.33436689, 
-              'iota': 2.5, # 1.59216065
+              'iota': 1.59216065, 
               'psi': 1.69112445, 
-              'ra': 2.2, # 5.08658471
-              'dec': -1.25  # 0.47136332
+              'ra': 5.08658471, 
+              'dec': 0.47136332
 }
 
 
@@ -380,7 +362,7 @@ if smart_initial_guess:
     # True sky location
     ra, dec, tc, iota = ref_params["ra"], ref_params["dec"], ref_params["t_c"], ref_params["iota"]
     sky_means = jnp.array([ra, dec, tc, iota])
-    sky_samples = sky_means + sky_std * z
+    sky_samples = sky_means + z * sky_std
     ra_samples, dec_samples, tc_samples, iota_samples = sky_samples[:,0], sky_samples[:,1], sky_samples[:,2], sky_samples[:,3]
 
     # Reflected sky location
@@ -424,17 +406,21 @@ if smart_initial_guess:
                             merged_ra, # ra, 11
                             jnp.sin(merged_dec), # sin_dec, 12
                             ]).T
+    
+    print(initial_guess)
+    
+    exit()
 
-    # Make a corner plot
-    print("Going to plot the walkers")
-    initial_guess_numpy = np.array(initial_guess)
-    ref_params["iota"] = jnp.cos(ref_params["iota"])
-    ref_params["dec"] = jnp.sin(ref_params["dec"])
-    truths = np.array([ref_params[p] for p in ref_params if p != "gmst"])
-    print("Plotting the initial guess")
-    fig = corner.corner(initial_guess_numpy, labels = labels_with_tc, truths = truths, hist_kwargs={'density': True}, **default_corner_kwargs)
-    # Save
-    fig.savefig(outdir_name + "initial_guess_corner.png", bbox_inches='tight')
+    ### Make a corner plot
+    # print("Going to plot the walkers")
+    # initial_guess_numpy = np.array(initial_guess)
+    # ref_params["iota"] = jnp.cos(ref_params["iota"])
+    # ref_params["dec"] = jnp.sin(ref_params["dec"])
+    # truths = np.array([ref_params[p] for p in ref_params if p != "gmst"])
+    # print("Plotting the initial guess")
+    # fig = corner.corner(initial_guess_numpy, labels = labels_with_tc, truths = truths, hist_kwargs={'density': True}, **default_corner_kwargs)
+    # # Save
+    # fig.savefig(outdir_name + "initial_guess_corner.png", bbox_inches='tight')
 else:
     initial_guess = None
 
