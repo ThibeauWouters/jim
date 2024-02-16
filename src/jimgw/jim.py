@@ -7,7 +7,7 @@ import jax.numpy as jnp
 from flowMC.sampler.Sampler import Sampler
 from flowMC.sampler.MALA import MALA
 from flowMC.nfmodel.rqSpline import MaskedCouplingRQSpline, RQSpline
-from flowMC.nfmodel.mlp import MLP
+# from flowMC.nfmodel.mlp import MLP
 from flowMC.utils.EvolutionaryOptimizer import EvolutionaryOptimizer
 from flowMC.utils.PRNG_keys import initialize_rng_keys
 
@@ -44,12 +44,12 @@ class Jim(object):
         
         ### New attempt
         key = jax.random.PRNGKey(123456789)
-        key, conditioner_key= jax.random.split(key)
-        n_features = self.Prior.n_dim
-        hidden_size = self.hidden_size
-        num_bins = self.num_bins
-        conditioner = MLP([n_features]+hidden_size+ [n_features*(num_bins*3+1)], conditioner_key, scale=1e-2, activation=jax.nn.tanh)
-        model = RQSpline(conditioner, -10.0, 10.0)
+        # key, conditioner_key= jax.random.split(key)
+        # n_features = self.Prior.n_dim
+        # hidden_size = self.hidden_size
+        # num_bins = self.num_bins
+        # conditioner = MLP([n_features]+hidden_size+ [n_features*(num_bins*3+1)], conditioner_key, scale=1e-2, activation=jax.nn.tanh)
+        # model = RQSpline(conditioner, -10.0, 10.0)
         
         ### Old code
         # TODO swap here

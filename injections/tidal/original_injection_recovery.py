@@ -14,6 +14,7 @@ import os
 #  })
 # TODO remove, this is to check memory usage
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.50"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import shutil
 import sys
 import json
@@ -23,7 +24,6 @@ from jimgw.jim import Jim
 from jimgw.detector import H1, L1, V1 
 from jimgw.likelihood import HeterodynedTransientLikelihoodFD
 from jimgw.waveform import RippleTaylorF2, RippleIMRPhenomD_NRTidalv2
-from jimgw.fisher_information_matrix import FisherInformationMatrix, plot_ratio_comparison, ORIGINAL_MASS_MATRIX
 from jimgw.prior import Uniform, Powerlaw, Composite
 # jax
 import jax.numpy as jnp
@@ -31,21 +31,12 @@ import jax
 import jax.profiler
 # ripple
 from ripple import Mc_eta_to_ms
-# get available jax devices
-nb_devices = len(jax.devices())
-print(f"GPU available? {nb_devices} devices available, using final device from this list")
-print(jax.devices())    
-chosen_device = jax.devices()[1]
-print(f"chosen_device: {chosen_device}")
-jax.config.update("jax_platform_name", "gpu")
-jax.config.update("jax_default_device", chosen_device)
 # others
 import numpy as np
 jax.config.update("jax_enable_x64", True)
 from astropy.time import Time
 
 import numpy as np
-import pandas as pd
 import corner
 import matplotlib.pyplot as plt
 
@@ -60,7 +51,6 @@ import gc
 ####################
 
 ### Script constants
-no_noise = False # whether to use noise in the injection
 SNR_THRESHOLD = 0.001 # skip injections with SNR below this threshold
 override_PSD = False # whether to load another PSD file -- unused now
 use_lambda_tildes = False # whether to use lambda tildes instead of individual component lambdas or not
@@ -109,8 +99,8 @@ else:
 HYPERPARAMETERS = {
     "flowmc": 
         {
-            "n_loop_training": 400, # 130 
-            "n_loop_production": 40, # 50
+            "n_loop_training": 130, # 130 
+            "n_loop_production": 20, # 50
             "n_local_steps": 200,
             "n_global_steps": 200, # 200
             "n_chains": 1000, 
@@ -265,7 +255,6 @@ def generate_config(prior_low: np.array,
                     prior_high: np.array, 
                     params_names: "list[str]", 
                     N_config: int = 1,
-                    no_noise: bool = no_noise
                     ) -> str:
     """
     From a given prior range and parameter names, generate the config files.
@@ -300,7 +289,6 @@ def generate_config(prior_low: np.array,
         'duration': 256,
         'fmin': 20,
         'ifos': ['H1', 'L1', 'V1'],
-        'no_noise': no_noise,
         'outdir' : output_path
     }
     
@@ -346,7 +334,6 @@ def body(N, outdir, load_existing_config = False):
         else:
             config = generate_config(prior_low, prior_high, naming, N)
         outdir = config["outdir"]
-        no_noise = config["no_noise"]
 
         print(PRIOR.items())
 
@@ -503,17 +490,14 @@ def body(N, outdir, load_existing_config = False):
         waveform = RippleTaylorF2(f_ref=f_ref)
         h_sky = waveform(freqs, true_params)
         
-        ## TODO what PSD is this?
         
-        jim_data_dir = "/home/thibeau.wouters/jim/data/"
-        
-        print("Injecting signal. No noise is set to: ", no_noise)
+        print("Injecting signal. No noise is set to: ")
         key, subkey = jax.random.split(jax.random.PRNGKey(config["seed"] + 1234))
-        H1.inject_signal(subkey, freqs, h_sky, detector_param, psd_file = "psd.txt", no_noise=no_noise)
+        H1.inject_signal(subkey, freqs, h_sky, detector_param, psd_file = "psd.txt")
         key, subkey = jax.random.split(key)
-        L1.inject_signal(subkey, freqs, h_sky, detector_param, psd_file = "psd.txt", no_noise=no_noise)
+        L1.inject_signal(subkey, freqs, h_sky, detector_param, psd_file = "psd.txt")
         key, subkey = jax.random.split(key)
-        V1.inject_signal(subkey, freqs, h_sky, detector_param, psd_file = "psd_virgo.txt", no_noise=no_noise)
+        V1.inject_signal(subkey, freqs, h_sky, detector_param, psd_file = "psd_virgo.txt")
         
         # if override_PSD:
         #     H1_psd_frequency, H1_psd = np.genfromtxt(f'{jim_data_dir}GW170817-IMRD_data0_1187008882-43_generation_data_dump.pickle_H1_psd.txt').T
@@ -551,8 +535,6 @@ def body(N, outdir, load_existing_config = False):
     snr_dict = {"detector": ["H1", "L1", "V1", "network"], 
                 "snr": [h1_snr, l1_snr, v1_snr, network_snr]}
     
-    df = pd.DataFrame(snr_dict)
-    df.to_csv(snr_file)
     
     # Also write string_snr to a txt file for easy access
     snr_txt_file = outdir + "snr.txt"
@@ -576,56 +558,57 @@ def body(N, outdir, load_existing_config = False):
     # if waveform_approximant == "IMRPhenomD_NRTidalv2":
     #     eps = 1e-2 # TODO test if this can be changed?
     # else:
-    eps = 1e-2
     
-    if use_fim:
-        fim = FisherInformationMatrix([H1, L1, V1], 
-                                  waveform = waveform, 
-                                  prior = prior,
-                                  trigger_time = gps, 
-                                  duration = T,
-                                  verbose=False)
+    
+    # if use_fim:
+    #     fim = FisherInformationMatrix([H1, L1, V1], 
+    #                               waveform = waveform, 
+    #                               prior = prior,
+    #                               trigger_time = gps, 
+    #                               duration = T,
+    #                               verbose=False)
 
-        print("INFO: Using FIM for step size")
-        print("Calculating FIM")
-        fim.compute_fim(true_params, H1.frequencies)
-        print("Calculating FIM: DONE")
+    #     print("INFO: Using FIM for step size")
+    #     print("Calculating FIM")
+    #     fim.compute_fim(true_params, H1.frequencies)
+    #     print("Calculating FIM: DONE")
 
-        print("Calculating inverted FIM")
-        fim.invert()
-        print("Calculating inverted FIM: DONE")
+    #     print("Calculating inverted FIM")
+    #     fim.invert()
+    #     print("Calculating inverted FIM: DONE")
 
-        print("Calculating mass matrix")
-        mass_matrix = fim.get_tuned_mass_matrix()
-        print("Calculating mass matrix: DONE")
+    #     print("Calculating mass matrix")
+    #     mass_matrix = fim.get_tuned_mass_matrix()
+    #     print("Calculating mass matrix: DONE")
         
-        print("Result")
-        print(np.diag(mass_matrix))
+    #     print("Result")
+    #     print(np.diag(mass_matrix))
         
-        print("Inversion error")
-        print(fim.eps)
+    #     print("Inversion error")
+    #     print(fim.eps)
         
-        local_sampler_arg = {"step_size": mass_matrix}
+    #     local_sampler_arg = {"step_size": mass_matrix}
         
-    else:
-        n_dim = 13
-        # mass_matrix = jnp.eye(n_dim)
-        # mass_matrix = mass_matrix.at[0,0].set(1e-5)
-        # mass_matrix = mass_matrix.at[1,1].set(1e-4)
-        # mass_matrix = mass_matrix.at[2,2].set(1e-3)
-        # mass_matrix = mass_matrix.at[3,3].set(1e-3)
-        # mass_matrix = mass_matrix.at[7,7].set(1e-5)
-        # mass_matrix = mass_matrix.at[11,11].set(1e-2)
-        # mass_matrix = mass_matrix.at[12,12].set(1e-2)
-        # mass_matrix = eps * mass_matrix
+    # else:
+    n_dim = 13
+    eps = 1e-4
+    mass_matrix = jnp.eye(n_dim)
+    mass_matrix = mass_matrix.at[0,0].set(1e-5)
+    mass_matrix = mass_matrix.at[1,1].set(1e-4)
+    mass_matrix = mass_matrix.at[2,2].set(1e-3)
+    mass_matrix = mass_matrix.at[3,3].set(1e-3)
+    mass_matrix = mass_matrix.at[7,7].set(1e-5)
+    mass_matrix = mass_matrix.at[11,11].set(1e-2)
+    mass_matrix = mass_matrix.at[12,12].set(1e-2)
+    mass_matrix = eps * mass_matrix
+    local_sampler_arg = {'step_size': mass_matrix}
+        
+        # ### Peter's mass matrix
+        # prior_range = jnp.array([prior.xmax - prior.xmin for prior in prior_list])
+        # mass_matrix = jnp.diag(prior_range)
+        # mass_matrix = mass_matrix * 1e-4
         # local_sampler_arg = {'step_size': mass_matrix}
-        
-        ### Peter's mass matrix
-        prior_range = jnp.array([prior.xmax - prior.xmin for prior in prior_list])
-        mass_matrix = jnp.diag(prior_range)
-        mass_matrix = mass_matrix * 1e-4
-        local_sampler_arg = {'step_size': mass_matrix}
-        print(jnp.diag(mass_matrix))
+        # print(jnp.diag(mass_matrix))
     
     
     hyperparameters["outdir_name"] = outdir
@@ -650,9 +633,9 @@ def body(N, outdir, load_existing_config = False):
     print(true_params)
 
     ### Diagnosis plots of summaries
-    print("Creating plots")
-    jim.Sampler.plot_summary("training")
-    jim.Sampler.plot_summary("production")
+    
+    # jim.Sampler.plot_summary("training")
+    # jim.Sampler.plot_summary("production")
 
     ### Save samples for the production stage (training samples is too expensive for memory)
     name = outdir + f'results_production.npz'
@@ -668,7 +651,7 @@ def body(N, outdir, load_existing_config = False):
     np.savez(name, chains=chains)
 
     ### Plot chains and samples
-
+    print("Creating plots")
     # Production samples:
     file = outdir + "results_production.npz"
     name = outdir + "results_production.png"
@@ -717,7 +700,7 @@ def main():
     # body(N, outdir=OUTDIR) # regular, computing on the fly
     
     # ### Rerun a specific injection
-    body(144, outdir = OUTDIR, load_existing_config = True) 
+    body(7, outdir = OUTDIR, load_existing_config = True) 
     
     # jax.profiler.save_device_memory_profile("memory.prof")
     
