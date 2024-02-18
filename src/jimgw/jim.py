@@ -207,7 +207,7 @@ class Jim(object):
         chains = self.Prior.transform(self.Prior.add_name(chains.transpose(2, 0, 1)))
         return chains
     
-    def save_hyperparameters(self):
+    def save_hyperparameters(self, outdir):
         
         # Convert step_size to list for JSON formatting
         if "step_size" in self.hyperparameters["local_sampler_arg"].keys():
@@ -216,7 +216,7 @@ class Jim(object):
         hyperparameters_dict = {"flowmc": self.Sampler.hyperparameters,
                                 "jim": self.hyperparameters}
         
-        name = self.Sampler.outdir_name + "hyperparams.json"
+        name = outdir + "hyperparams.json"
         with open(name, 'w') as file:
             json.dump(hyperparameters_dict, file)
 
