@@ -20,6 +20,8 @@ default_hyperparameters = {
         "hidden_size": [128,128],
         "num_bins": 8,
         "local_sampler_arg": {},
+        "n_walkers_maximize_likelihood": 100,
+        "n_loops_maximize_likelihood": 2000,
 }
 
 
@@ -34,7 +36,6 @@ class Jim(object):
         "hidden_size": "List[int, int] Sizes of the hidden layers of the NF",
         "num_bins": "(int) Number of bins used in MaskedCouplingRQSpline",
         "local_sampler_arg": "(dict) Additional arguments to be used in the local sampler",
-        "rng_key_set": "(jnp.array) Key set to be used in PRNG keys",
         "n_walkers_maximize_likelihood": "(int) Number of walkers used in the maximization of the likelihood with the evolutionary optimizer",
         "n_loops_maximize_likelihood": "(int) Number of loops to run the evolutionary optimizer in the maximization of the likelihood",
     """
@@ -216,9 +217,13 @@ class Jim(object):
         hyperparameters_dict = {"flowmc": self.Sampler.hyperparameters,
                                 "jim": self.hyperparameters}
         
-        name = outdir + "hyperparams.json"
-        with open(name, 'w') as file:
-            json.dump(hyperparameters_dict, file)
+        try:
+            name = outdir + "hyperparams.json"
+            with open(name, 'w') as file:
+                json.dump(hyperparameters_dict, file)
+        except Exception as e:
+            print(f"Error occurred saving jim hyperparameters, are all hyperparams JSON compatible?: {e}")
+            
 
     def plot(self):
         pass

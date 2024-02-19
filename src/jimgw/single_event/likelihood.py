@@ -159,9 +159,6 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
             self.ref_params = self.maximize_likelihood(
                 bounds=bounds, prior=prior, popsize=popsize, n_loops=n_loops
             )
-            
-            print("ref params found:")
-            print(self.ref_params)
         else:
             print("Using provided reference parameters")
             self.ref_params = ref_params
