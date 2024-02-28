@@ -371,7 +371,7 @@ class GroundBased2G(Detector):
         freqs: Float[Array, " n_sample"],
         h_sky: dict[str, Float[Array, " n_sample"]],
         params: dict[str, Float],
-        psd_file: str = "",
+        psd_file: str = ""
     ) -> None:
         """
         Inject a signal into the detector data.
@@ -395,10 +395,12 @@ class GroundBased2G(Detector):
         """
         self.frequencies = freqs
         self.psd = self.load_psd(freqs, psd_file)
-        key, subkey = jax.random.split(key, 2)
+        key, subkey_real, subkey_imag = jax.random.split(key, 3)
         var = self.psd / (4 * (freqs[1] - freqs[0]))
-        noise_real = jax.random.normal(key, shape=freqs.shape) * jnp.sqrt(var / 2.0)
-        noise_imag = jax.random.normal(subkey, shape=freqs.shape) * jnp.sqrt(var / 2.0)
+        
+        noise_real = jax.random.normal(subkey_real, shape=freqs.shape) * jnp.sqrt(var / 2.0)
+        noise_imag = jax.random.normal(subkey_imag, shape=freqs.shape) * jnp.sqrt(var / 2.0)
+            
         align_time = jnp.exp(
             -1j * 2 * jnp.pi * freqs * (params["epoch"] + params["t_c"])
         )
