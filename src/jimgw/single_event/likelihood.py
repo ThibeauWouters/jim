@@ -136,6 +136,8 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         popsize: int = 100,
         n_loops: int = 2000,
         ref_params = None,
+        save_binning_scheme: bool = False,
+        save_binning_scheme_location: str = "./",
     ) -> None:
         super().__init__(
             detectors, waveform, trigger_time, duration, post_trigger_duration
@@ -151,6 +153,11 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         freq_grid, self.freq_grid_center = self.make_binning_scheme(
             np.array(frequency_original), n_bins
         )
+        if save_binning_scheme:
+            filename = f"{save_binning_scheme_location}freq_grid_rb.npz"
+            print(f"Saving the relative binning scheme to {filename}...")
+            np.save(filename, freq_grid=self.freq_grid, freq_grid_center=self.freq_grid_center)
+        
         self.freq_grid_low = freq_grid[:-1]
 
         print("Finding reference parameters..")
