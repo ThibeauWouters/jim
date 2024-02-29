@@ -332,43 +332,6 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
             log_likelihood += match_filter_SNR - optimal_SNR / 2
         return log_likelihood
     
-    # TODO delete
-    # def my_evaluate(
-    #     self, params: dict[str, Float], data: dict
-    # ) -> (
-    #     Float
-    # ):  # TODO: This is for testing, remove it!
-    #     """
-    #     Evaluate the likelihood for a given set of parameters, but maximize over phase and time.
-    #     """
-    #     log_likelihood = 0
-    #     frequencies = self.frequencies
-    #     df = frequencies[1] - frequencies[0]
-    #     params["gmst"] = self.gmst
-    #     waveform_sky = self.waveform(frequencies, params)
-    #     align_time = jnp.exp(
-    #         -1j * 2 * jnp.pi * frequencies * (self.epoch + params["t_c"])
-    #     )
-    #     for detector in self.detectors:
-    #         waveform_dec = (
-    #             detector.fd_response(frequencies, waveform_sky, params) * align_time
-    #         )
-    #         X = (
-    #             4
-    #             * ((jnp.conj(waveform_dec) * detector.data) / detector.psd * df
-    #             ).real
-    #         )
-    #         X_tc = jnp.fft.fft(X)
-    #         X_tc = jnp.amax(jnp.absolute(X_tc))
-    #         optimal_SNR = (
-    #             4
-    #             * jnp.sum(
-    #                 jnp.conj(waveform_dec) * waveform_dec / detector.psd * df
-    #             ).real
-    #         )
-    #         log_likelihood += X_tc - optimal_SNR / 2
-    #     return log_likelihood
-
     @staticmethod
     def max_phase_diff(
         f: npt.NDArray[np.float_],
