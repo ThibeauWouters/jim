@@ -6,6 +6,7 @@ import json
 
 from flowMC.sampler.Sampler import Sampler
 from flowMC.sampler.MALA import MALA
+from flowMC.sampler.Gaussian_random_walk import GaussianRandomWalk
 from flowMC.nfmodel.rqSpline import MaskedCouplingRQSpline
 from flowMC.utils.PRNG_keys import initialize_rng_keys
 from flowMC.utils.EvolutionaryOptimizer import EvolutionaryOptimizer
@@ -22,6 +23,7 @@ default_hyperparameters = {
         "local_sampler_arg": {},
         "n_walkers_maximize_likelihood": 100,
         "n_loops_maximize_likelihood": 2000,
+        "which_local_sampler": "MALA",
 }
 
 
@@ -38,6 +40,7 @@ class Jim(object):
         "local_sampler_arg": "(dict) Additional arguments to be used in the local sampler",
         "n_walkers_maximize_likelihood": "(int) Number of walkers used in the maximization of the likelihood with the evolutionary optimizer",
         "n_loops_maximize_likelihood": "(int) Number of loops to run the evolutionary optimizer in the maximization of the likelihood",
+        "which_local_sampler": "(str) Name of the local sampler to use",
     """
 
     def __init__(self, likelihood: LikelihoodBase, prior: Prior, **kwargs):
@@ -58,9 +61,18 @@ class Jim(object):
         rng_key_set = initialize_rng_keys(self.hyperparameters["n_chains"], seed=self.hyperparameters["seed"])
         local_sampler_arg = kwargs.get("local_sampler_arg", {})
 
-        local_sampler = MALA(
-            self.posterior, True, local_sampler_arg
-        )  # Remember to add routine to find automated mass matrix
+        if self.hyperparameters["which_local_sampler"] == "MALA":
+            print("INFO: Using MALA as local sampler")
+            local_sampler = MALA(
+                self.posterior, True, local_sampler_arg
+            )  # Remember to add routine to find automated mass matrix
+        elif self.hyperparameters["which_local_sampler"] == "GaussianRandomWalk":
+            print("INFO: Using gaussian random walk as local sampler")
+            local_sampler = GaussianRandomWalk(
+                self.posterior, True, local_sampler_arg
+            )  # Remember to add routine to find automated mass matrix
+        else:   
+            raise ValueError(f"Local sampler {which_local_sampler} not recognized")
 
         flowHMC_params = kwargs.get("flowHMC_params", {})
         model = MaskedCouplingRQSpline(
