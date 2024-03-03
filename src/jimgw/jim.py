@@ -6,10 +6,11 @@ import json
 
 from flowMC.sampler.Sampler import Sampler
 from flowMC.sampler.MALA import MALA
+from flowMC.sampler.Gaussian_random_walk import GaussianRandomWalk
 from flowMC.nfmodel.rqSpline import MaskedCouplingRQSpline
 from flowMC.utils.PRNG_keys import initialize_rng_keys
 from flowMC.utils.EvolutionaryOptimizer import EvolutionaryOptimizer
-# from flowMC.sampler.flowHMC import flowHMC
+from flowMC.sampler.flowHMC import flowHMC
 
 from jimgw.prior import Prior
 from jimgw.base import LikelihoodBase
@@ -61,6 +62,10 @@ class Jim(object):
         local_sampler = MALA(
             self.posterior, True, local_sampler_arg
         )  # Remember to add routine to find automated mass matrix
+        
+        # local_sampler = GaussianRandomWalk(
+        #     self.posterior, True, local_sampler_arg
+        # )  # Remember to add routine to find automated mass matrix
 
         flowHMC_params = kwargs.get("flowHMC_params", {})
         model = MaskedCouplingRQSpline(
