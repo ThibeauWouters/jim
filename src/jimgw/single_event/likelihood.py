@@ -371,6 +371,11 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         """
 
         gamma = np.arange(-5, 10, 1) / 3.0
+        print("original gamma")
+        print(gamma)
+        gamma = np.array([-5 / 3, -2 / 3, 1, 5 / 3, 7 / 3])
+        print("bilby gamma")
+        print(gamma)
         f = np.repeat(f[:, None], len(gamma), axis=1)
         f_star = np.repeat(f_low, len(gamma))
         f_star[gamma >= 0] = f_high
@@ -406,7 +411,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         if epsilon:
             phase_diff_from_start = phase_diff_array - phase_diff_array[0]
             n_bins = int(phase_diff_from_start[-1] / epsilon)
-            print(f"Using {n_bins}bins for relative binning")
+            print(f"Using {n_bins} bins for relative binning")
 
         bin_f = interp1d(phase_diff_array, freqs)
         f_bins = np.array([])
