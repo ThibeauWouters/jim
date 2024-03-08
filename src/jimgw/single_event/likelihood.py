@@ -137,6 +137,9 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         popsize: int = 100,
         n_loops: int = 2000,
         ref_params = None,
+        save_binning_scheme: bool = False,
+        save_binning_scheme_location: str = "./",
+        save_binning_scheme_name: str = "freq_grid"
     ) -> None:
         super().__init__(
             detectors, waveform, trigger_time, duration, post_trigger_duration
@@ -154,6 +157,11 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
             n_bins,
             epsilon,
         )
+        if save_binning_scheme:
+            filename = f"{save_binning_scheme_location}{save_binning_scheme_name}.npz"
+            print(f"Saving the relative binning scheme to {filename}...")
+            np.savez(filename, freq_grid=freq_grid, freq_grid_center=self.freq_grid_center)
+        
         self.freq_grid_low = freq_grid[:-1]
 
         print("Finding reference parameters..")
@@ -363,6 +371,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         """
 
         gamma = np.arange(-5, 10, 1) / 3.0
+<<<<<<< HEAD
         print("OG gamma")
         print(gamma)
         
@@ -374,6 +383,13 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         print("bilby gamma")
         print(gamma)
         
+=======
+        print("original gamma")
+        print(gamma)
+        gamma = np.array([-5 / 3, -2 / 3, 1, 5 / 3, 7 / 3])
+        print("bilby gamma")
+        print(gamma)
+>>>>>>> ef71ec5a652fe173719a7e5af630c21e9d9307a8
         f = np.repeat(f[:, None], len(gamma), axis=1)
         f_star = np.repeat(f_low, len(gamma))
         f_star[gamma >= 0] = f_high
