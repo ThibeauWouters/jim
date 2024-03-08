@@ -1,3 +1,10 @@
+import psutil
+p = psutil.Process()
+p.cpu_affinity([0])
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = "3"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.25"
+# Regular imports
 import time
 from jimgw.jim import Jim
 from jimgw.single_event.detector import H1, L1
@@ -6,12 +13,23 @@ from jimgw.single_event.waveform import RippleIMRPhenomPv2
 from jimgw.prior import Uniform, Composite, Sphere
 import jax.numpy as jnp
 import jax
+import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
 ###########################################
 ########## First we grab data #############
 ###########################################
+
+import optax
+n_epochs = 50
+n_loop_training = 400
+total_epochs = n_epochs * n_loop_training
+start = int(total_epochs / 10)
+start_lr = 1e-3
+end_lr = 1e-5
+power = 4.0
+schedule_fn = optax.polynomial_schedule(start_lr, end_lr, power, total_epochs-start, transition_begin=start)
 
 total_time_start = time.time()
 
@@ -116,17 +134,17 @@ likelihood = HeterodynedTransientLikelihoodFD([H1, L1], prior=prior, bounds=boun
 mass_matrix = jnp.eye(prior.n_dim)
 mass_matrix = mass_matrix.at[1, 1].set(1e-3)
 mass_matrix = mass_matrix.at[9, 9].set(1e-3)
-local_sampler_arg = {"step_size": mass_matrix * 3e-3}
+local_sampler_arg = {"step_size": mass_matrix * 1e-4}
 
 jim = Jim(
     likelihood,
     prior,
-    n_loop_training=200,
-    n_loop_production=10,
-    n_local_steps=300,
-    n_global_steps=300,
-    n_chains=500,
-    n_epochs=300,
+    n_loop_training=n_loop_training,
+    n_loop_production=50,
+    n_local_steps=5,
+    n_global_steps=400,
+    n_chains=1000,
+    n_epochs=n_epochs,
     learning_rate=0.001,
     max_samples = 10000,
     momentum=0.9,
@@ -135,7 +153,21 @@ jim = Jim(
     keep_quantile=0.,
     train_thinning=1,
     output_thinning=30,
+    num_layers=6,
+    hidden_size=[64, 64],
+    num_bins=8,
     local_sampler_arg=local_sampler_arg,
 )
 
 jim.sample(jax.random.PRNGKey(42))
+
+jim.print_summary()
+
+name = f'./outdir_PV2/results_production.npz'
+state = jim.Sampler.get_sampler_state(training=False)
+chains, log_prob, local_accs, global_accs = state["chains"], state[
+        "log_prob"], state["local_accs"], state["global_accs"]
+local_accs = jnp.mean(local_accs, axis=0)
+global_accs = jnp.mean(global_accs, axis=0)
+np.savez(name, chains=chains, log_prob=log_prob,
+             local_accs=local_accs, global_accs=global_accs)

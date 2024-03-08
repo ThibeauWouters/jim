@@ -1,8 +1,16 @@
+import psutil
+p = psutil.Process()
+p.cpu_affinity([0])
+
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = "3"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.25"
+
 # jim
 from jimgw.jim import Jim
 from jimgw.single_event.detector import H1, L1, V1
-from jimgw.single_event.likelihood import HeterodynedTransientLikelihoodFD, TransientLikelihoodFD
-from jimgw.single_event.waveform import RippleTaylorF2, RippleIMRPhenomD_NRTidalv2
+from jimgw.single_event.likelihood import HeterodynedTransientLikelihoodFD
+from jimgw.single_event.waveform import RippleIMRPhenomD_NRTidalv2
 from jimgw.prior import Uniform, PowerLaw, Composite
 # ripple
 # flowmc
@@ -10,21 +18,21 @@ from flowMC.utils.PRNG_keys import initialize_rng_keys
 # jax
 import jax.numpy as jnp
 import jax
-chosen_device = jax.devices()[1]
-jax.config.update("jax_platform_name", "gpu")
-jax.config.update("jax_default_device", chosen_device)
 # others
 import numpy as np
 jax.config.update("jax_enable_x64", True)
 from astropy.time import Time
 
-# import urllib.request
-import os
 import time
 import shutil
 import numpy as np
 import matplotlib.pyplot as plt
 import corner
+
+import optax
+import utils
+
+print(jax.devices())
 
 # TODO move!!!
 default_corner_kwargs = dict(bins=40, 
@@ -138,13 +146,14 @@ q_prior = Uniform(
     naming=["q"],
     transforms={"q": ("eta", lambda params: params["q"] / (1 + params["q"]) ** 2)},
 )
-s1z_prior                = Uniform(-0.05, 0.05, naming=["s1_z"])
-s2z_prior                = Uniform(-0.05, 0.05, naming=["s2_z"])
+s1z_prior     = Uniform(-0.05, 0.05, naming=["s1_z"])
+s2z_prior     = Uniform(-0.05, 0.05, naming=["s2_z"])
 lambda1_prior = Uniform(0.0, 5000.0, naming=["lambda_1"])
 lambda2_prior = Uniform(0.0, 5000.0, naming=["lambda_2"])
 
 # External parameters
-dL_prior       = PowerLaw(1.0, 75.0, 2.0, naming=["d_L"])
+# dL_prior       = PowerLaw(1.0, 75.0, 2.0, naming=["d_L"])
+dL_prior       = Uniform(1.0, 75.0, naming=["d_L"])
 t_c_prior      = Uniform(-0.1, 0.1, naming=["t_c"])
 phase_c_prior  = Uniform(0.0, 2 * jnp.pi, naming=["phase_c"])
 cos_iota_prior = Uniform(
@@ -194,9 +203,23 @@ prior = Composite([
 )
 
 # The following only works if every prior has xmin and xmax property, which is OK for Uniform and Powerlaw
-bounds = jnp.array([[p.xmin, p.xmax] for p in prior.priors]).T
+bounds = jnp.array([[p.xmin, p.xmax] for p in prior.priors])
 
 ### Create likelihood object
+ref_params = {'M_c': 1.19754357, 
+              'eta': 0.24984541, 
+              's1_z': -0.00429651, 
+              's2_z': 0.00470304, 
+              'lambda_1': 1816.51300368, 
+              'lambda_2': 0.10161503, 
+              'd_L': 10.87770389, 
+              't_c': 0.00864911, 
+              'phase_c': 4.33436689, 
+              'iota': 1.59216065, 
+              'psi': 1.69112445, 
+              'ra': 5.08658471, 
+              'dec': 0.47136332
+}
 ref_params = None
 n_bins = 100
 likelihood = HeterodynedTransientLikelihoodFD([H1, L1, V1], prior=prior, bounds=bounds, waveform=waveform, trigger_time=gps, duration=T, n_bins=n_bins, ref_params=ref_params)
@@ -205,7 +228,7 @@ print("Running with n_bins  = ", n_bins)
 
 ### Create sampler and jim objects
 
-eps = 1e-2
+eps = 1e-5
 n_chains = 1000
 n_dim = 13
 mass_matrix = jnp.eye(n_dim)
@@ -219,18 +242,31 @@ mass_matrix = mass_matrix.at[12,12].set(1e-2)
 local_sampler_arg = {"step_size": mass_matrix * eps}
 
 outdir_name = "./outdir/"
+outdir = outdir_name
+
+n_epochs = 50
+n_loop_training = 100
+
+total_epochs = n_epochs * n_loop_training
+start = int(total_epochs / 10)
+start_lr = 1e-3
+end_lr = 1e-5
+power = 4.0
+schedule_fn = optax.polynomial_schedule(
+    start_lr, end_lr, power, total_epochs-start, transition_begin=start)
+scheduler_string = f"Polynomial scheduler: start_lr = {start_lr}, end_lr = {end_lr}, power = {power}, start = {start}"
+
 
 jim = Jim(
     likelihood,
     prior,
-    n_loop_pretraining=0,
-    n_loop_training=100,
+    n_loop_training=400,
     n_loop_production=20,
-    n_local_steps=200,
-    n_global_steps=200,
+    n_local_steps=5,
+    n_global_steps=400,
     n_chains=n_chains,
-    n_epochs=100,
-    learning_rate=0.001,
+    n_epochs=50,
+    learning_rate=schedule_fn,
     max_samples=50000,
     momentum=0.9,
     batch_size=50000,
@@ -240,6 +276,7 @@ jim = Jim(
     output_thinning=30,    
     n_loops_maximize_likelihood = 2000,
     local_sampler_arg=local_sampler_arg,
+    stopping_criterion_global_acc = 0.2,
     outdir_name=outdir_name
 )
 
@@ -268,60 +305,91 @@ for filename in os.listdir(outdir_name):
 ### Summary
 jim.print_summary()
 
+# Overwrite the learning rate
+try:
+    jim.Sampler.hyperparameters["learning_rate"] = schedule_fn
+except Exception as e:
+    print(f"Failed to overwrite learning rate: {e}")
+
+# === Show results, save output ===
+
+# # Cleaning outdir
+# for filename in os.listdir(outdir):
+#     file_path = os.path.join(outdir_name, filename)
+#     try:
+#         if os.path.isfile(file_path) or os.path.islink(file_path):
+#             os.unlink(file_path)
+#         elif os.path.isdir(file_path):
+#             shutil.rmtree(file_path)
+#     except Exception as e:
+#         print('Failed to delete %s. Reason: %s' % (file_path, e))
+
+### Summary
+jim.print_summary()
+
 ### Diagnosis plots of summaries
-print("Creating plots")
-jim.Sampler.plot_summary("training")
-jim.Sampler.plot_summary("production")
 
-### Write to 
-which_list = ["training", "production"]
-for which in which_list:
-    name = outdir_name + f'results_{which}.npz'
-    print(f"Saving {which} samples in npz format to {name}")
-    state = jim.Sampler.get_sampler_state(which)
-    chains, log_prob, local_accs, global_accs = state["chains"], state["log_prob"], state["local_accs"], state["global_accs"]
-    np.savez(name, chains=chains, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs)
+name = outdir + f'results_training.npz'
+print(f"Saving samples to {name}")
+state = jim.Sampler.get_sampler_state(training=True)
+chains, log_prob, local_accs, global_accs, loss_vals = state["chains"], state[
+    "log_prob"], state["local_accs"], state["global_accs"], state["loss_vals"]
+local_accs = jnp.mean(local_accs, axis=0)
+global_accs = jnp.mean(global_accs, axis=0)
+np.savez(name, log_prob=log_prob, local_accs=local_accs,
+            global_accs=global_accs, loss_vals=loss_vals)
 
-print("Sampling from the flow")
-chains = jim.Sampler.sample_flow(10000)
-name = outdir_name + 'results_NF.npz'
-print(f"Saving flow samples to {name}")
+utils.plot_accs(local_accs, "Local accs (training)",
+                "local_accs_training", outdir)
+utils.plot_accs(global_accs, "Global accs (training)",
+                "global_accs_training", outdir)
+utils.plot_loss_vals(loss_vals, "Loss", "loss_vals", outdir)
+utils.plot_log_prob(log_prob, "Log probability (training)",
+                    "log_prob_training", outdir)
+
+#  - production phase
+name = outdir + f'results_production.npz'
+state = jim.Sampler.get_sampler_state(training=False)
+chains, log_prob, local_accs, global_accs = state["chains"], state[
+    "log_prob"], state["local_accs"], state["global_accs"]
+local_accs = jnp.mean(local_accs, axis=0)
+global_accs = jnp.mean(global_accs, axis=0)
+np.savez(name, chains=chains, log_prob=log_prob,
+            local_accs=local_accs, global_accs=global_accs)
+
+utils.plot_accs(local_accs, "Local accs (production)",
+                "local_accs_production", outdir)
+utils.plot_accs(global_accs, "Global accs (production)",
+                "global_accs_production", outdir)
+utils.plot_log_prob(log_prob, "Log probability (production)",
+                    "log_prob_production", outdir)
+
+# Plot the chains as corner plots
+utils.plot_chains(chains, "chains_production", outdir, truths=None)
+
+# Save the NF and show a plot of samples from the flow
+print("Saving the NF")
+jim.Sampler.save_flow(outdir + "nf_model")
+name = outdir + 'results_NF.npz'
+chains = jim.Sampler.sample_flow(10_000)
 np.savez(name, chains=chains)
+# TODO debug this
+# utils.plot_chains(chains, "chains_NF", outdir, truths=truths)
 
-### Plot chains and samples
+# Final steps
 
-# Production samples:
-file = outdir_name + "results_production.npz"
-name = outdir_name + "results_production.png"
+# Finally, copy over this script to the outdir for reproducibility
+shutil.copy2(__file__, outdir + "copy_injection_recovery.py")
 
-data = np.load(file)
-# TODO improve the following: ignore t_c, and reshape with n_dims, and do conversions
-idx_list = [0,1,2,3,4,5,6,8,9,10,11,12]
-chains = data['chains'][:,:,idx_list].reshape(-1,12)
-chains[:,8] = np.arccos(chains[:,8])
-chains[:,11] = np.arcsin(chains[:,11])
-chains = np.asarray(chains)
-corner_kwargs = default_corner_kwargs
-fig = corner.corner(chains, labels = labels, hist_kwargs={'density': True}, **default_corner_kwargs)
-fig.savefig(name, bbox_inches='tight')  
+print("Saving the jim hyperparameters")
+jim.save_hyperparameters(outdir=outdir)
 
-# Production samples:
-file = outdir_name + "results_NF.npz"
-name = outdir_name + "results_NF.png"
+end_time = time.time()
+runtime = end_time - total_time_start
+print(f"Time taken: {runtime} seconds ({(runtime)/60} minutes)")
 
-data = np.load(file)["chains"]
-print("np.shape(data)")
-print(np.shape(data))
+print(f"Saving runtime")
+with open(outdir + 'runtime.txt', 'w') as file:
+    file.write(str(runtime))
 
-# TODO improve the following: ignore t_c, and reshape with n_dims, and do conversions
-chains = data[:, idx_list]
-# chains[:,6] = np.arccos(chains[:,6])
-# chains[:,9] = np.arcsin(chains[:,9]) # TODO not sure if this is still necessary?
-chains = np.asarray(chains)
-corner_kwargs = default_corner_kwargs
-fig = corner.corner(chains, labels = labels, hist_kwargs={'density': True}, **default_corner_kwargs)
-fig.savefig(name, bbox_inches='tight')  
-    
-    
-print("Saving the hyperparameters")
-jim.save_hyperparameters()
+print("Finished successfully!!!")
