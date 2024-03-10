@@ -224,8 +224,8 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         if len(self.freq_grid_low) > len(self.freq_grid_center):
             self.freq_grid_low = self.freq_grid_low[: len(self.freq_grid_center)]
 
-        h_sky_low = self.waveform(self.freq_grid_low, self.ref_params)
-        h_sky_center = self.waveform(self.freq_grid_center, self.ref_params)
+        h_sky_low = self.reference_waveform(self.freq_grid_low, self.ref_params)
+        h_sky_center = self.reference_waveform(self.freq_grid_center, self.ref_params)
 
         # Get phase shifts to align time of coalescence
         align_time = jnp.exp(
