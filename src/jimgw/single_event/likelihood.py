@@ -127,6 +127,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         self,
         detectors: list[Detector],
         waveform: Waveform,
+        reference_waveform: Waveform,
         prior: Prior,
         bounds: Float[Array, " n_dim 2"],
         n_bins: int = 100,
@@ -135,10 +136,11 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         post_trigger_duration: float = 2,
         popsize: int = 100,
         n_loops: int = 2000,
-        ref_params = None,
+        ref_params: dict = {},
         save_binning_scheme: bool = False,
         save_binning_scheme_location: str = "./",
         save_binning_scheme_name: str = "freq_grid",
+        **kwargs
     ) -> None:
         super().__init__(
             detectors, waveform, trigger_time, duration, post_trigger_duration
@@ -163,15 +165,16 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
 
         print("Finding reference parameters..")
 
-        if ref_params is None:
-            self.ref_params = self.maximize_likelihood(
+        if not ref_params:
+            print("No reference parameters are provided, finding it...")
+            ref_params = self.maximize_likelihood(
                 bounds=bounds, prior=prior, popsize=popsize, n_loops=n_loops
             )
+            self.ref_params = {key: float(value) for key, value in ref_params.items()}
+            print(f"The reference parameters are {self.ref_params}")
         else:
-            print("Using provided reference parameters:")
-            print("ref_params")
-            print(ref_params)
             self.ref_params = ref_params
+            print(f"Reference parameters provided, which are {self.ref_params}")
 
         print("Constructing reference waveforms..")
 
@@ -184,16 +187,27 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         self.B0_array = {}
         self.B1_array = {}
 
-        h_sky = self.waveform(frequency_original, self.ref_params)
+        if reference_waveform is None:
+            reference_waveform = self.waveform
+        
+        self.reference_waveform = reference_waveform
+            
+        h_sky = self.reference_waveform(frequency_original, self.ref_params)
 
         # Get frequency masks to be applied, for both original
         # and heterodyne frequency grid
         h_amp = jnp.sum(
             jnp.array([jnp.abs(h_sky[key]) for key in h_sky.keys()]), axis=0
         )
-        f_valid = frequency_original[jnp.where(h_amp > 0)[0]]
-        f_max = jnp.max(f_valid)
-        f_min = jnp.min(f_valid)
+        
+        if ("f_min" in kwargs) and ("f_max" in kwargs):
+            f_max = kwargs["f_max"]
+            f_min = kwargs["f_min"]
+            print(f"Using provided frequency bounds for the heterodyne grid: [{f_min}, {f_max}]")
+        else:
+            f_valid = frequency_original[jnp.where(h_amp > 0)[0]]
+            f_max = jnp.max(f_valid)
+            f_min = jnp.min(f_valid)
 
         mask_heterodyne_grid = jnp.where((freq_grid <= f_max) & (freq_grid >= f_min))[0]
         mask_heterodyne_low = jnp.where(
