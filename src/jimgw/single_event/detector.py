@@ -202,7 +202,8 @@ class GroundBased2G(Detector):
         f_max: Float,
         psd_pad: int = 16,
         tukey_alpha: Float = 0.2,
-        gwpy_kwargs: dict = {"cache": True},
+        load_psd: bool = True,
+        gwpy_kwargs: dict = {"cache": True, "verbose": True},
     ) -> None:
         """
         Load data from the detector.
@@ -243,22 +244,22 @@ class GroundBased2G(Detector):
         start_psd = int(trigger_time) - gps_start_pad - 2 * psd_pad
         end_psd = int(trigger_time) - gps_start_pad - psd_pad
 
-        print("Fetching PSD data...")
-        psd_data_td = TimeSeries.fetch_open_data(
-            self.name, start_psd, end_psd, **gwpy_kwargs
-        )
-        assert isinstance(
-            psd_data_td, TimeSeries
-        ), "PSD data is not a TimeSeries object."
-        psd = psd_data_td.psd(
-            fftlength=segment_length
-        ).value  # TODO: Check whether this is sright.
-
-        print("Finished loading data.")
-
         self.frequencies = freq[(freq > f_min) & (freq < f_max)]
         self.data = data[(freq > f_min) & (freq < f_max)]
-        self.psd = psd[(freq > f_min) & (freq < f_max)]
+        if load_psd:
+            print("Fetching PSD data...")
+            psd_data_td = TimeSeries.fetch_open_data(
+                self.name, start_psd, end_psd, **gwpy_kwargs
+            )
+            assert isinstance(
+                psd_data_td, TimeSeries
+            ), "PSD data is not a TimeSeries object."
+            psd = psd_data_td.psd(
+                fftlength=segment_length
+            ).value  # TODO: Check whether this is sright.
+            self.psd = psd[(freq > f_min) & (freq < f_max)]
+        else:
+            self.psd = jnp.ones_like(self.frequencies)
 
     def fd_response(
         self,
@@ -407,6 +408,42 @@ class GroundBased2G(Detector):
 
         signal = self.fd_response(freqs, h_sky, params) * align_time
         self.data = signal + noise_real + 1j * noise_imag
+        
+    def load_data_from_frame(self,
+                             trigger_time: float,
+                             gps_start_pad: int,
+                             gps_end_pad: int,
+                             frame_file_path: str,
+                             channel_name: str,
+                             f_min: float,
+                             f_max: float,
+                             tukey_alpha: float = 0.2,
+                             type: str = "gwf") -> None: 
+
+        print(f'Fetching data from frame file from {frame_file_path}...')
+        if type == "gwf":
+            data_td = TimeSeries.read(frame_file_path, channel_name,
+                                    start = trigger_time - gps_start_pad,
+                                    end = trigger_time + gps_end_pad)
+        elif type == "hdf5":
+            data_td = TimeSeries.read(frame_file_path, format="hdf5.gwosc",
+                                start = trigger_time - gps_start_pad,
+                                end = trigger_time + gps_end_pad)
+        else:
+            raise ValueError("Type of file not recognized. Please use 'gwf' or 'hdf5'.")
+        
+        print("data_td.value")
+        print(data_td.value)
+        # segment_length = data_td.duration.value # TODO unused?
+        n = len(data_td)
+        delta_t = data_td.dt.value
+        data = jnp.fft.rfft(jnp.array(data_td.value) * tukey(n, tukey_alpha)) * delta_t
+        freq = jnp.fft.rfftfreq(n, delta_t)
+
+        print("Finished reading the data.")
+
+        self.frequencies = freq[(freq > f_min) & (freq < f_max)]
+        self.data = data[(freq > f_min) & (freq < f_max)]
 
     @jaxtyped
     def load_psd(
