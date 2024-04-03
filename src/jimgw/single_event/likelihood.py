@@ -11,6 +11,7 @@ from jimgw.single_event.detector import Detector
 from jimgw.prior import Prior
 from jimgw.single_event.waveform import Waveform
 from jimgw.base import LikelihoodBase
+import time
 
 
 class SingleEventLiklihood(LikelihoodBase):
@@ -139,10 +140,17 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         save_binning_scheme: bool = False,
         save_binning_scheme_location: str = "./",
         save_binning_scheme_name: str = "freq_grid",
+        reference_waveform: Waveform = None
     ) -> None:
+        
         super().__init__(
             detectors, waveform, trigger_time, duration, post_trigger_duration
         )
+        
+        if reference_waveform is None:
+            reference_waveform = self.waveform
+            
+        self.reference_waveform = reference_waveform
 
         print("Initializing heterodyned likelihood..")
 
@@ -186,7 +194,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         self.B0_array = {}
         self.B1_array = {}
 
-        h_sky = self.waveform(frequency_original, self.ref_params)
+        h_sky = self.reference_waveform(frequency_original, self.ref_params)
 
         # Get frequency masks to be applied, for both original
         # and heterodyne frequency grid
@@ -212,8 +220,8 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         if len(self.freq_grid_low) > len(self.freq_grid_center):
             self.freq_grid_low = self.freq_grid_low[: len(self.freq_grid_center)]
 
-        h_sky_low = self.waveform(self.freq_grid_low, self.ref_params)
-        h_sky_center = self.waveform(self.freq_grid_center, self.ref_params)
+        h_sky_low = self.reference_waveform(self.freq_grid_low, self.ref_params)
+        h_sky_center = self.reference_waveform(self.freq_grid_center, self.ref_params)
 
         # Get phase shifts to align time of coalescence
         align_time = jnp.exp(
@@ -319,7 +327,8 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         frequencies = self.frequencies
         df = frequencies[1] - frequencies[0]
         params["gmst"] = self.gmst
-        waveform_sky = self.waveform(frequencies, params)
+        # NOTE: setting the reference waveform to be used here
+        waveform_sky = self.reference_waveform(frequencies, params)
         align_time = jnp.exp(
             -1j * 2 * jnp.pi * frequencies * (self.epoch + params["t_c"])
         )
@@ -456,12 +465,19 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         def y(x):
             return -self.evaluate_original(prior.transform(prior.add_name(x)), {})
 
+        start_time = time.time()
         y = jax.jit(jax.vmap(y))
 
         print("Starting the optimizer")
         optimizer = EvolutionaryOptimizer(len(bounds), popsize=popsize, verbose=True)
         _ = optimizer.optimize(y, bounds, n_loops=n_loops)
         best_fit = optimizer.get_result()[0]
+        end_time = time.time()
+        
+        elapsed_time = end_time - start_time
+        with open(f"{self.outdir}runtime_evosax.txt", "w") as f:
+            f.write(elapsed_time)
+        print(f"Optimization time: {elapsed_time} seconds")
         return prior.transform(prior.add_name(best_fit))
 
 
