@@ -790,7 +790,7 @@ class TriangularGroundBased3G(Detector):
         print(f"The correlated Optimal SNR is {optimal_SNR}")
         print(f"The correlated match filter SNR is {match_filter_SNR}")
 
-        cov_uncorr = cov * jnp.einsum('i,jk->ijk', freqs, jnp.eye(3))
+        cov_uncorr = cov * jnp.einsum('i,jk->ijk', jnp.ones(freqs.shape), jnp.eye(3))
         inv_cov_uncorr = jnp.linalg.inv(cov_uncorr)
 
         optimal_SNR_2 = jnp.einsum(
