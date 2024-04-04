@@ -140,7 +140,8 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         save_binning_scheme: bool = False,
         save_binning_scheme_location: str = "./",
         save_binning_scheme_name: str = "freq_grid",
-        reference_waveform: Waveform = None
+        reference_waveform: Waveform = None,
+        outdir_name: str = "./outdir/",
     ) -> None:
         
         super().__init__(
@@ -151,6 +152,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
             reference_waveform = self.waveform
             
         self.reference_waveform = reference_waveform
+        self.outdir_name = outdir_name
 
         print("Initializing heterodyned likelihood..")
 
@@ -170,18 +172,29 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         self.freq_grid_low = freq_grid[:-1]
 
         print("Finding reference parameters..")
-
-        if ref_params is None:
-            self.ref_params = self.maximize_likelihood(
-                bounds=bounds, prior=prior, popsize=popsize, n_loops=n_loops
-            )
-            print("self.ref_params found:")
-            print(self.ref_params)
-        else:
-            print("Using provided reference parameters:")
-            print("ref_params")
-            print(ref_params)
+        self.ref_params = self.maximize_likelihood(
+            bounds=bounds, prior=prior, popsize=popsize, n_loops=n_loops
+        )
+        
+        print("Ref params found by evosax:")
+        print(self.ref_params)
+        
+        if ref_params is not None:
+            print("Overriding with reference parameters:")
             self.ref_params = ref_params
+            
+        # Sanity check for lambdas before proceeding:
+        if self.ref_params["lambda_1"] <= 0.0 and self.ref_params["lambda_2"] > 0:
+            self.ref_params["lambda_1"] = self.ref_params["lambda_2"]
+        elif self.ref_params["lambda_1"] > 0.0 and self.ref_params["lambda_2"] <= 0:
+            self.ref_params["lambda_2"] = self.ref_params["lambda_1"]
+        elif self.ref_params["lambda_1"] <= 0.0 and self.ref_params["lambda_2"] <= 0:
+            print("WARNIGN: Both lambdas found to be zero or negative. Setting both to 1.0.")
+            self.ref_params["lambda_1"] = 1.0
+            self.ref_params["lambda_2"] = 1.0
+            
+        print("ref_params for relative binning:")
+        print(self.ref_params)
 
         print("Constructing reference waveforms..")
 
@@ -459,7 +472,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         self,
         bounds: Float[Array, " n_dim 2"],
         prior: Prior,
-        popsize: int = 100,
+        popsize: int = 200,
         n_loops: int = 2000,
     ):
         def y(x):
@@ -475,9 +488,9 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         end_time = time.time()
         
         elapsed_time = end_time - start_time
-        with open(f"{self.outdir}runtime_evosax.txt", "w") as f:
-            f.write(elapsed_time)
-        print(f"Optimization time: {elapsed_time} seconds")
+        with open(f"{self.outdir_name}runtime_evosax.txt", "w") as f:
+            f.write(str(elapsed_time))
+        print(f"Optimization time: {elapsed_time} seconds, {elapsed_time / 60} minutes.")
         return prior.transform(prior.add_name(best_fit))
 
 
