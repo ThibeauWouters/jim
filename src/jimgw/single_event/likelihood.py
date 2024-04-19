@@ -170,18 +170,19 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
             np.savez(filename, freq_grid=freq_grid, freq_grid_center=self.freq_grid_center)
         
         self.freq_grid_low = freq_grid[:-1]
-
-        print("Finding reference parameters..")
-        self.ref_params = self.maximize_likelihood(
-            bounds=bounds, prior=prior, popsize=popsize, n_loops=n_loops
-        )
-        
-        print("Ref params found by evosax:")
-        print(self.ref_params)
         
         if ref_params is not None:
-            print("Overriding with reference parameters:")
+            print("Setting relative binning with given reference parameters:")
             self.ref_params = ref_params
+        else:
+            print("Finding reference parameters with evosax..")
+            self.ref_params = self.maximize_likelihood(
+            bounds=bounds, prior=prior, popsize=popsize, n_loops=n_loops
+            )
+        
+        
+        print("Ref params used:")
+        print(self.ref_params)
             
         # Sanity check for lambdas before proceeding:
         if self.ref_params["lambda_1"] <= 0.0 and self.ref_params["lambda_2"] > 0:
@@ -193,9 +194,6 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
             self.ref_params["lambda_1"] = 1.0
             self.ref_params["lambda_2"] = 1.0
             
-        print("ref_params for relative binning:")
-        print(self.ref_params)
-
         print("Constructing reference waveforms..")
 
         self.ref_params["gmst"] = self.gmst
