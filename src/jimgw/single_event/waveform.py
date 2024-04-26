@@ -131,9 +131,13 @@ class RippleIMRPhenomD_NRTidalv2(Waveform):
 
     f_ref: float
 
-    def __init__(self, f_ref: float = 20.0, use_lambda_tildes: bool = False):
+    def __init__(self, 
+                 f_ref: float = 20.0, 
+                 use_lambda_tildes: bool = False,
+                 stop: str = "None"):
         self.f_ref = f_ref
         self.use_lambda_tildes = use_lambda_tildes
+        self.stop = stop
 
     def __call__(self, frequency: Array, params: dict) -> dict:
         output = {}
@@ -160,7 +164,7 @@ class RippleIMRPhenomD_NRTidalv2(Waveform):
             params["iota"],
         ]
         
-        hp, hc = gen_NRTidalv2_hphc(frequency, theta, self.f_ref, use_lambda_tildes=self.use_lambda_tildes)
+        hp, hc = gen_NRTidalv2_hphc(frequency, theta, self.f_ref, use_lambda_tildes=self.use_lambda_tildes, stop=stop)
         output["p"] = hp
         output["c"] = hc
         return output
@@ -209,9 +213,13 @@ class RippleTaylorF2QM(Waveform):
 
     f_ref: float
 
-    def __init__(self, f_ref: float = 20.0, use_lambda_tildes: bool = False):
+    def __init__(self, 
+                 f_ref: float = 20.0, 
+                 use_lambda_tildes: bool = False,
+                 stop: str = "None"):
         self.f_ref = f_ref
         self.use_lambda_tildes = use_lambda_tildes
+        self.stop = stop
 
     def __call__(self, frequency: Array, params: dict) -> dict:
         output = {}
@@ -237,7 +245,7 @@ class RippleTaylorF2QM(Waveform):
             params["phase_c"],
             params["iota"],
         ]
-        hp, hc = gen_TaylorF2QM_hphc(frequency, theta, self.f_ref, use_lambda_tildes=self.use_lambda_tildes)
+        hp, hc = gen_TaylorF2QM_hphc(frequency, theta, self.f_ref, use_lambda_tildes=self.use_lambda_tildes, stop=stop)
         output["p"] = hp
         output["c"] = hc
         return output
