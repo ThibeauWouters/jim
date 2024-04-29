@@ -164,7 +164,7 @@ class RippleIMRPhenomD_NRTidalv2(Waveform):
             params["iota"],
         ]
         
-        hp, hc = gen_NRTidalv2_hphc(frequency, theta, self.f_ref, use_lambda_tildes=self.use_lambda_tildes, stop=stop)
+        hp, hc = gen_NRTidalv2_hphc(frequency, theta, self.f_ref, use_lambda_tildes=self.use_lambda_tildes, stop=self.stop)
         output["p"] = hp
         output["c"] = hc
         return output
@@ -245,7 +245,7 @@ class RippleTaylorF2QM(Waveform):
             params["phase_c"],
             params["iota"],
         ]
-        hp, hc = gen_TaylorF2QM_hphc(frequency, theta, self.f_ref, use_lambda_tildes=self.use_lambda_tildes, stop=stop)
+        hp, hc = gen_TaylorF2QM_hphc(frequency, theta, self.f_ref, use_lambda_tildes=self.use_lambda_tildes, stop=self.stop)
         output["p"] = hp
         output["c"] = hc
         return output
