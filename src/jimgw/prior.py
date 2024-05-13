@@ -220,7 +220,6 @@ class Unconstrained_Uniform(Prior):
 
 
 class Sphere(Prior):
-
     """
     A prior on a sphere represented by Cartesian coordinates.
 
@@ -267,7 +266,12 @@ class Sphere(Prior):
         phi = x[self.naming[1]]
         mag = x[self.naming[2]]
         output = jnp.where(
-            (mag > 1) | (mag < 0) | (phi > 2* jnp.pi) | (phi < 0) | (theta > 1) | (theta < -1),
+            (mag > 1)
+            | (mag < 0)
+            | (phi > 2 * jnp.pi)
+            | (phi < 0)
+            | (theta > jnp.pi)
+            | (theta < 0),
             jnp.zeros_like(0) - jnp.inf,
             jnp.log(mag**2 * jnp.sin(x[self.naming[0]])),
         )
@@ -276,7 +280,6 @@ class Sphere(Prior):
 
 @jaxtyped
 class AlignedSpin(Prior):
-
     """
     Prior distribution for the aligned (z) component of the spin.
 
@@ -390,7 +393,6 @@ class AlignedSpin(Prior):
 
 @jaxtyped
 class PowerLaw(Prior):
-
     """
     A prior following the power-law with alpha in the range [xmin, xmax).
     p(x) ~ x^{\alpha}
@@ -465,6 +467,86 @@ class PowerLaw(Prior):
             jnp.zeros_like(variable),
         )
         log_p = self.alpha * jnp.log(variable) + jnp.log(self.normalization)
+        return log_p + log_in_range
+
+
+@jaxtyped
+class Exponential(Prior):
+    """
+    A prior following the power-law with alpha in the range [xmin, xmax).
+    p(x) ~ exp(\alpha x)
+    """
+
+    xmin: Float = 0.0
+    xmax: Float = jnp.inf
+    alpha: Float = -1.0
+    normalization: Float = 1.0
+
+    def __repr__(self):
+        return f"Exponential(xmin={self.xmin}, xmax={self.xmax}, alpha={self.alpha}, naming={self.naming})"
+
+    def __init__(
+        self,
+        xmin: Float,
+        xmax: Float,
+        alpha: Union[Int, Float],
+        naming: list[str],
+        transforms: dict[str, tuple[str, Callable]] = {},
+        **kwargs,
+    ):
+        super().__init__(naming, transforms)
+        if alpha < 0.0:
+            assert xmin != -jnp.inf, "With negative alpha, xmin must finite"
+        if alpha > 0.0:
+            assert xmax != jnp.inf, "With positive alpha, xmax must finite"
+        assert not jnp.isclose(alpha, 0.0), "alpha=zero is given, use Uniform instead"
+        assert self.n_dim == 1, "Exponential needs to be 1D distributions"
+
+        self.xmax = xmax
+        self.xmin = xmin
+        self.alpha = alpha
+
+        self.normalization = self.alpha / (
+            jnp.exp(self.alpha * self.xmax) - jnp.exp(self.alpha * self.xmin)
+        )
+
+    def sample(
+        self, rng_key: PRNGKeyArray, n_samples: int
+    ) -> dict[str, Float[Array, " n_samples"]]:
+        """
+        Sample from a exponential distribution.
+
+        Parameters
+        ----------
+        rng_key : PRNGKeyArray
+            A random key to use for sampling.
+        n_samples : int
+            The number of samples to draw.
+
+        Returns
+        -------
+        samples : dict
+            Samples from the distribution. The keys are the names of the parameters.
+
+        """
+        q_samples = jax.random.uniform(rng_key, (n_samples,), minval=0.0, maxval=1.0)
+        samples = (
+            self.xmin
+            + jnp.log1p(
+                q_samples * (jnp.exp(self.alpha * (self.xmax - self.xmin)) - 1.0)
+            )
+            / self.alpha
+        )
+        return self.add_name(samples[None])
+
+    def log_prob(self, x: dict[str, Float]) -> Float:
+        variable = x[self.naming[0]]
+        log_in_range = jnp.where(
+            (variable >= self.xmax) | (variable <= self.xmin),
+            jnp.zeros_like(variable) - jnp.inf,
+            jnp.zeros_like(variable),
+        )
+        log_p = self.alpha * variable + jnp.log(self.normalization)
         return log_p + log_in_range
 
 
