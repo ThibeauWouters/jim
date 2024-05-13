@@ -739,10 +739,35 @@ class TriangularGroundBased3G(Detector):
         E1_psd = self.load_psd(freqs, psd_file_dict['E1'])
         E2_psd = self.load_psd(freqs, psd_file_dict['E2'])
         E3_psd = self.load_psd(freqs, psd_file_dict['E3'])
+        
+        # TODO: bit cumbersome, can improve this?
+        if np.median(E1_psd) > 1e-30: 
+            print(f"E1_psd is likely ASD, not PSD, squaring it.")
+            E1_psd = E1_psd**2
+            
+        if np.median(E2_psd) > 1e-30: 
+            print(f"E2_psd is likely ASD, not PSD, squaring it.")
+            E2_psd = E2_psd**2
+            
+        if np.median(E3_psd) > 1e-30: 
+            print(f"E3_psd is likely ASD, not PSD, squaring it.")
+            E3_psd = E3_psd**2
 
         E12_csd = self.load_csd(freqs, csd_file_dict['E12'])
         E23_csd = self.load_csd(freqs, csd_file_dict['E23'])
         E13_csd = self.load_csd(freqs, csd_file_dict['E13'])
+
+        if np.median(E12_csd) > 1e-30: 
+            print(f"E1_psd is likely ASD, not PSD, squaring it.")
+            E12_csd = E12_csd**2
+            
+        if np.median(E23_csd) > 1e-30: 
+            print(f"E2_psd is likely ASD, not PSD, squaring it.")
+            E23_csd = E23_csd**2
+            
+        if np.median(E3_psd) > 1e-30: 
+            print(f"E3_psd is likely ASD, not PSD, squaring it.")
+            E13_csd = E13_csd**2
 
         psd = jnp.array([[E1_psd, E12_csd, E13_csd],
                          [E12_csd.conj(), E2_psd, E23_csd],
@@ -812,6 +837,8 @@ class TriangularGroundBased3G(Detector):
 
         print(f"The uncorrelated Optimal SNR is {optimal_SNR}")
         print(f"The uncorrelated match filter SNR is {match_filter_SNR}")
+        
+        self.match_filter_SNR = match_filter_SNR
 
     @jaxtyped
     def load_psd(

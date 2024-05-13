@@ -17,6 +17,7 @@ class Prior(Distribution):
     """
 
     naming: list[str]
+    label: list[str]
     transforms: dict[str, tuple[str, Callable]] = field(default_factory=dict)
 
     @property
@@ -24,19 +25,24 @@ class Prior(Distribution):
         return len(self.naming)
 
     def __init__(
-        self, naming: list[str], transforms: dict[str, tuple[str, Callable]] = {}
+        self, naming: list[str], label: list[str] = None, transforms: dict[str, tuple[str, Callable]] = {}
     ):
         """
         Parameters
         ----------
         naming : list[str]
             A list of names for the parameters of the prior.
+        label : list[str]
+            A list of labels for the parameters, to be used e.g. in plots
         transforms : dict[tuple[str,Callable]]
             A dictionary of transforms to apply to the parameters. The keys are
             the names of the parameters and the values are a tuple of the name
             of the transform and the transform itself.
         """
         self.naming = naming
+        if label is None:
+            label = self.naming
+        self.label = label
         self.transforms = {}
 
         def make_lambda(name):
@@ -103,10 +109,11 @@ class Uniform(Prior):
         xmin: Float,
         xmax: Float,
         naming: list[str],
+        label: list[str] = None,
         transforms: dict[str, tuple[str, Callable]] = {},
         **kwargs,
     ):
-        super().__init__(naming, transforms)
+        super().__init__(naming, label, transforms)
         assert self.n_dim == 1, "Uniform needs to be 1D distributions"
         self.xmax = xmax
         self.xmin = xmin
@@ -158,10 +165,11 @@ class Unconstrained_Uniform(Prior):
         xmin: Float,
         xmax: Float,
         naming: list[str],
+        label: list[str] = None,
         transforms: dict[str, tuple[str, Callable]] = {},
         **kwargs,
     ):
-        super().__init__(naming, transforms)
+        super().__init__(naming, label, transforms)
         assert self.n_dim == 1, "Unconstrained_Uniform needs to be 1D distributions"
         self.xmax = xmax
         self.xmin = xmin
@@ -230,8 +238,12 @@ class Sphere(Prior):
     def __repr__(self):
         return f"Sphere(naming={self.naming})"
 
-    def __init__(self, naming: str, **kwargs):
+    # TODO: add label?
+    def __init__(self, naming: str, label: list[str] = None, **kwargs):
         self.naming = [f"{naming}_theta", f"{naming}_phi", f"{naming}_mag"]
+        if label is None:
+            label = self.naming
+        self.label = label
         self.transforms = {
             self.naming[0]: (
                 f"{naming}_x",
@@ -302,10 +314,11 @@ class AlignedSpin(Prior):
         self,
         amax: Float,
         naming: list[str],
+        label: list[str] = None,
         transforms: dict[str, tuple[str, Callable]] = {},
         **kwargs,
     ):
-        super().__init__(naming, transforms)
+        super().__init__(naming, label, transforms)
         assert self.n_dim == 1, "Alignedspin needs to be 1D distributions"
         self.amax = amax
         self.xmin = -amax
@@ -404,10 +417,11 @@ class PowerLaw(Prior):
         xmax: Float,
         alpha: Union[Int, Float],
         naming: list[str],
+        label: list[str] = None,
         transforms: dict[str, tuple[str, Callable]] = {},
         **kwargs,
     ):
-        super().__init__(naming, transforms)
+        super().__init__(naming, label, transforms)
         if alpha < 0.0:
             assert xmin > 0.0, "With negative alpha, xmin must > 0"
         assert self.n_dim == 1, "Powerlaw needs to be 1D distributions"
@@ -475,12 +489,15 @@ class Composite(Prior):
         **kwargs,
     ):
         naming = []
+        label = []
         self.transforms = {}
         for prior in priors:
             naming += prior.naming
+            label += prior.label
             self.transforms.update(prior.transforms)
         self.priors = priors
         self.naming = naming
+        self.label = label
         self.transforms.update(transforms)
 
     def sample(

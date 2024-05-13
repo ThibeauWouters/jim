@@ -12,7 +12,6 @@ from flowMC.sampler.flowHMC import flowHMC
 from jimgw.prior import Prior
 from jimgw.base import LikelihoodBase
 
-
 class Jim(object):
     """
     Master class for interfacing with flowMC
