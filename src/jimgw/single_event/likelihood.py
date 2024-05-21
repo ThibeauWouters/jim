@@ -100,6 +100,129 @@ class TransientLikelihoodFD(SingleEventLiklihood):
         return log_likelihood
 
 
+class DoubleTransientLikelihoodFD(SingleEventLiklihood):
+    def __init__(
+        self,
+        detectors: list[Detector],
+        waveform: Waveform,
+        trigger_time: float = 0,
+        duration: float = 4,
+        post_trigger_duration: float = 2,
+        **kwargs,
+    ) -> None:
+        self.detectors = detectors
+        assert jnp.all(
+            jnp.array(
+                [
+                    (self.detectors[0].frequencies == detector.frequencies).all()  # type: ignore
+                    for detector in self.detectors
+                ]
+            )
+        ), "The detectors must have the same frequency grid"
+        self.frequencies = self.detectors[0].frequencies  # type: ignore
+        self.waveform = waveform
+        self.trigger_time = trigger_time
+        self.gmst = (
+            Time(trigger_time, format="gps").sidereal_time("apparent", "greenwich").rad
+        )
+
+        self.trigger_time = trigger_time
+        self.duration = duration
+        self.post_trigger_duration = post_trigger_duration
+
+    @property
+    def epoch(self):
+        """
+        The epoch of the data.
+        """
+        return self.duration - self.post_trigger_duration
+
+    @property
+    def ifos(self):
+        """
+        The interferometers for the likelihood.
+        """
+        return [detector.name for detector in self.detectors]
+
+    def extract_params(
+        self, params: dict[str, Float]
+    ) -> tuple[dict[str, Float], dict[str, Float]]:
+        """
+        Extract the parameters for the two components of the binary.
+        """
+        params_1 = {key[:-2]: params[key] for key in params if key[-1] == "1"}
+        params_2 = {key[:-2]: params[key] for key in params if key[-1] == "2"}
+        return params_1, params_2
+
+    def evaluate(self, params: dict[str, Float], data: dict) -> Float:
+        # TODO: Test whether we need to pass data in or with class changes is fine.
+        """
+        Evaluate the likelihood for a given set of parameters.
+        """
+        log_likelihood = 0
+        frequencies = self.frequencies
+        df = frequencies[1] - frequencies[0]
+        params["gmst"] = self.gmst
+        params_1, params_2 = self.extract_params(params)
+
+        waveform_sky_1 = self.waveform(frequencies, params_1)
+        waveform_sky_2 = self.waveform(frequencies, params_2)
+        align_time_1 = jnp.exp(
+            -1j * 2 * jnp.pi * frequencies * (self.epoch + params["t_c"])
+        )  # NOTE: Think about whether to call it t_c or t_c_1
+        align_time_2 = jnp.exp(
+            -1j * 2 * jnp.pi * frequencies * (self.epoch + params["t_c"] + params["dt"])
+        )  # NOTE: Decide on convention for dt parameter
+
+        for detector in self.detectors:
+            waveform_dec_1 = (
+                detector.fd_response(frequencies, waveform_sky_1, params_1)
+                * align_time_1
+            )
+            waveform_dec_2 = (
+                detector.fd_response(frequencies, waveform_sky_2, params_2)
+                * align_time_2
+            )
+            match_filter_SNR_1 = (
+                4
+                * jnp.sum(
+                    (jnp.conj(waveform_dec_1) * detector.data) / detector.psd * df
+                ).real
+            )
+            match_filter_SNR_2 = (
+                4
+                * jnp.sum(
+                    (jnp.conj(waveform_dec_2) * detector.data) / detector.psd * df
+                ).real
+            )
+            cross_term_1_2 = (
+                4
+                * jnp.sum(
+                    (jnp.conj(waveform_dec_1) * waveform_dec_2) / detector.psd * df
+                ).real
+            )
+            optimal_SNR_1 = (
+                4
+                * jnp.sum(
+                    jnp.conj(waveform_dec_1) * waveform_dec_1 / detector.psd * df
+                ).real
+            )
+            optimal_SNR_2 = (
+                4
+                * jnp.sum(
+                    jnp.conj(waveform_dec_2) * waveform_dec_2 / detector.psd * df
+                ).real
+            )
+            log_likelihood += (
+                match_filter_SNR_1
+                - optimal_SNR_1 / 2
+                + match_filter_SNR_2
+                - optimal_SNR_2 / 2
+                - cross_term_1_2
+            )
+        return log_likelihood
+
+
 class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
     n_bins: int  # Number of bins to use for the likelihood
     ref_params: dict  # Reference parameters for the likelihood
@@ -136,21 +259,21 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         post_trigger_duration: float = 2,
         popsize: int = 100,
         n_loops: int = 2000,
-        ref_params = None,
+        ref_params=None,
         save_binning_scheme: bool = False,
         save_binning_scheme_location: str = "./",
         save_binning_scheme_name: str = "freq_grid",
         reference_waveform: Waveform = None,
         outdir_name: str = "./outdir/",
     ) -> None:
-        
+
         super().__init__(
             detectors, waveform, trigger_time, duration, post_trigger_duration
         )
-        
+
         if reference_waveform is None:
             reference_waveform = self.waveform
-            
+
         self.reference_waveform = reference_waveform
         self.outdir_name = outdir_name
 
@@ -167,33 +290,36 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         if save_binning_scheme:
             filename = f"{save_binning_scheme_location}{save_binning_scheme_name}.npz"
             print(f"Saving the relative binning scheme to {filename}...")
-            np.savez(filename, freq_grid=freq_grid, freq_grid_center=self.freq_grid_center)
-        
+            np.savez(
+                filename, freq_grid=freq_grid, freq_grid_center=self.freq_grid_center
+            )
+
         self.freq_grid_low = freq_grid[:-1]
-        
+
         if ref_params is not None:
             print("Setting relative binning with given reference parameters:")
             self.ref_params = ref_params
         else:
             print("Finding reference parameters with evosax..")
             self.ref_params = self.maximize_likelihood(
-            bounds=bounds, prior=prior, popsize=popsize, n_loops=n_loops
+                bounds=bounds, prior=prior, popsize=popsize, n_loops=n_loops
             )
-        
-        
+
         print("Ref params used:")
         print(self.ref_params)
-            
+
         # Sanity check for lambdas before proceeding:
         if self.ref_params["lambda_1"] <= 0.0 and self.ref_params["lambda_2"] > 0:
             self.ref_params["lambda_1"] = self.ref_params["lambda_2"]
         elif self.ref_params["lambda_1"] > 0.0 and self.ref_params["lambda_2"] <= 0:
             self.ref_params["lambda_2"] = self.ref_params["lambda_1"]
         elif self.ref_params["lambda_1"] <= 0.0 and self.ref_params["lambda_2"] <= 0:
-            print("WARNIGN: Both lambdas found to be zero or negative. Setting both to 1.0.")
+            print(
+                "WARNIGN: Both lambdas found to be zero or negative. Setting both to 1.0."
+            )
             self.ref_params["lambda_1"] = 1.0
             self.ref_params["lambda_2"] = 1.0
-            
+
         print("Constructing reference waveforms..")
 
         self.ref_params["gmst"] = self.gmst
@@ -361,7 +487,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
             )
             log_likelihood += match_filter_SNR - optimal_SNR / 2
         return log_likelihood
-    
+
     @staticmethod
     def max_phase_diff(
         f: npt.NDArray[np.float_],
@@ -484,11 +610,13 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         _ = optimizer.optimize(y, bounds, n_loops=n_loops)
         best_fit = optimizer.get_result()[0]
         end_time = time.time()
-        
+
         elapsed_time = end_time - start_time
         with open(f"{self.outdir_name}runtime_evosax.txt", "w") as f:
             f.write(str(elapsed_time))
-        print(f"Optimization time: {elapsed_time} seconds, {elapsed_time / 60} minutes.")
+        print(
+            f"Optimization time: {elapsed_time} seconds, {elapsed_time / 60} minutes."
+        )
         return prior.transform(prior.add_name(best_fit))
 
 
