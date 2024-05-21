@@ -68,7 +68,6 @@ class TransientLikelihoodFD(SingleEventLiklihood):
         return [detector.name for detector in self.detectors]
 
     def evaluate(self, params: dict[str, Float], data: dict) -> Float:
-        # TODO: Test whether we need to pass data in or with class changes is fine.
         """
         Evaluate the likelihood for a given set of parameters.
         """
@@ -164,19 +163,25 @@ class DoubleTransientLikelihoodFD(SingleEventLiklihood):
         df = frequencies[1] - frequencies[0]
         params["gmst"] = self.gmst
         params_1, params_2 = self.extract_params(params)
+        
+        print("params_1")
+        print(params_1)
+        
+        print("params_2")
+        print(params_2)
 
         waveform_sky_1 = self.waveform(frequencies, params_1)
         waveform_sky_2 = self.waveform(frequencies, params_2)
         align_time_1 = jnp.exp(
-            -1j * 2 * jnp.pi * frequencies * (self.epoch + params["t_c_1"])
-        )  # NOTE: Think about whether to call it t_c or t_c_1
+            -1j * 2 * jnp.pi * frequencies * (self.epoch + params["t_c"])
+        ) 
         align_time_2 = jnp.exp(
             -1j
             * 2
             * jnp.pi
             * frequencies
-            * (self.epoch + params["t_c_1"] + params["dt"])
-        )  # NOTE: Decide on convention for dt parameter
+            * (self.epoch + params["t_c"] + params["dt"])
+        )
 
         for detector in self.detectors:
             waveform_dec_1 = (
