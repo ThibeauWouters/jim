@@ -372,7 +372,8 @@ class GroundBased2G(Detector):
         freqs: Float[Array, " n_sample"],
         h_sky: dict[str, Float[Array, " n_sample"]],
         params: dict[str, Float],
-        psd_file: str = ""
+        psd_file: str = "",
+        noise_free: bool = False,
     ) -> None:
         """
         Inject a signal into the detector data.
@@ -398,40 +399,52 @@ class GroundBased2G(Detector):
         self.psd = self.load_psd(freqs, psd_file)
         key, subkey_real, subkey_imag = jax.random.split(key, 3)
         var = self.psd / (4 * (freqs[1] - freqs[0]))
-        
-        noise_real = jax.random.normal(subkey_real, shape=freqs.shape) * jnp.sqrt(var / 2.0)
-        noise_imag = jax.random.normal(subkey_imag, shape=freqs.shape) * jnp.sqrt(var / 2.0)
-            
+
+        noise_real = jax.random.normal(subkey_real, shape=freqs.shape) * jnp.sqrt(
+            var / 2.0
+        )
+        noise_imag = jax.random.normal(subkey_imag, shape=freqs.shape) * jnp.sqrt(
+            var / 2.0
+        )
+
         align_time = jnp.exp(
             -1j * 2 * jnp.pi * freqs * (params["epoch"] + params["t_c"])
         )
 
         signal = self.fd_response(freqs, h_sky, params) * align_time
-        self.data = signal + noise_real + 1j * noise_imag
-        
-    def load_data_from_frame(self,
-                             trigger_time: float,
-                             gps_start_pad: int,
-                             gps_end_pad: int,
-                             frame_file_path: str,
-                             channel_name: str,
-                             f_min: float,
-                             f_max: float,
-                             tukey_alpha: float = 0.2,
-                             type: str = "gwf") -> None: 
+        self.data = signal + noise_real + 1j * noise_imag if not noise_free else signal
 
-        print(f'Fetching data from frame file from {frame_file_path}...')
+    def load_data_from_frame(
+        self,
+        trigger_time: float,
+        gps_start_pad: int,
+        gps_end_pad: int,
+        frame_file_path: str,
+        channel_name: str,
+        f_min: float,
+        f_max: float,
+        tukey_alpha: float = 0.2,
+        type: str = "gwf",
+    ) -> None:
+
+        print(f"Fetching data from frame file from {frame_file_path}...")
         if type == "gwf":
-            data_td = TimeSeries.read(frame_file_path, channel_name,
-                                    start = trigger_time - gps_start_pad,
-                                    end = trigger_time + gps_end_pad)
+            data_td = TimeSeries.read(
+                frame_file_path,
+                channel_name,
+                start=trigger_time - gps_start_pad,
+                end=trigger_time + gps_end_pad,
+            )
         elif type == "hdf5":
-            data_td = TimeSeries.read(frame_file_path, format="hdf5.gwosc",
-                                start = trigger_time - gps_start_pad,
-                                end = trigger_time + gps_end_pad)
+            data_td = TimeSeries.read(
+                frame_file_path,
+                format="hdf5.gwosc",
+                start=trigger_time - gps_start_pad,
+                end=trigger_time + gps_end_pad,
+            )
         else:
             raise ValueError("Type of file not recognized. Please use 'gwf' or 'hdf5'.")
-        
+
         print("data_td.value")
         print(data_td.value)
         # segment_length = data_td.duration.value # TODO unused?
