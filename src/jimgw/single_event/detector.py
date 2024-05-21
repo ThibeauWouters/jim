@@ -376,7 +376,7 @@ class GroundBased2G(Detector):
         noise_free: bool = False,
     ) -> None:
         """
-        Inject a signal into the detector data.
+        Inject a signal into the detector data. If data is already initialized, will add the new waveform on top.
 
         Parameters
         ----------
@@ -390,6 +390,8 @@ class GroundBased2G(Detector):
             Dictionary of parameters.
         psd_file : str
             Path to the PSD file.
+        noise_free : bool = False
+            Inject without adding a noise realization on top.
 
         Returns
         -------
@@ -412,7 +414,11 @@ class GroundBased2G(Detector):
         )
 
         signal = self.fd_response(freqs, h_sky, params) * align_time
-        self.data = signal + noise_real + 1j * noise_imag if not noise_free else signal
+        # TODO: improve this a bit
+        if len(self.data) == 0:
+            self.data  = signal + noise_real + 1j * noise_imag if not noise_free else signal
+        else:
+            self.data += signal + noise_real + 1j * noise_imag if not noise_free else signal
 
     def load_data_from_frame(
         self,
