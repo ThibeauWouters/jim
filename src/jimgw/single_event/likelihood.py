@@ -168,10 +168,14 @@ class DoubleTransientLikelihoodFD(SingleEventLiklihood):
         waveform_sky_1 = self.waveform(frequencies, params_1)
         waveform_sky_2 = self.waveform(frequencies, params_2)
         align_time_1 = jnp.exp(
-            -1j * 2 * jnp.pi * frequencies * (self.epoch + params["t_c"])
+            -1j * 2 * jnp.pi * frequencies * (self.epoch + params["t_c_1"])
         )  # NOTE: Think about whether to call it t_c or t_c_1
         align_time_2 = jnp.exp(
-            -1j * 2 * jnp.pi * frequencies * (self.epoch + params["t_c"] + params["dt"])
+            -1j
+            * 2
+            * jnp.pi
+            * frequencies
+            * (self.epoch + params["t_c_1"] + params["dt"])
         )  # NOTE: Decide on convention for dt parameter
 
         for detector in self.detectors:
