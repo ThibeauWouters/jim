@@ -151,6 +151,8 @@ class DoubleTransientLikelihoodFD(SingleEventLiklihood):
         """
         params_1 = {key[:-2]: params[key] for key in params if key[-1] == "1"}
         params_2 = {key[:-2]: params[key] for key in params if key[-1] == "2"}
+        params_1["gmst"] = self.gmst
+        params_2["gmst"] = self.gmst
         return params_1, params_2
 
     def evaluate(self, params: dict[str, Float], data: dict) -> Float:
