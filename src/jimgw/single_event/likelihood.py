@@ -13,6 +13,9 @@ from jimgw.single_event.waveform import Waveform
 from jimgw.base import LikelihoodBase
 import time
 
+from collections import defaultdict
+import re
+
 
 class SingleEventLiklihood(LikelihoodBase):
     detectors: list[Detector]
@@ -98,8 +101,30 @@ class TransientLikelihoodFD(SingleEventLiklihood):
             log_likelihood += match_filter_SNR - optimal_SNR / 2
         return log_likelihood
 
+def original_overlapping_likelihood(
+    params_list: list[dict[str, Float]],
+    h_sky_list: list[dict[str, Float[Array, " n_dim"]]],
+    detectors: list[Detector],
+    freqs: Float[Array, " n_dim"],
+    align_time_list: list[Float],
+    **kwargs,
+) -> Float:
+    log_likelihood = 0.0
+    df = freqs[1] - freqs[0]
+    for detector in detectors:
+        # Get the waveform for each signal
+        h_dec_list = [detector.fd_response(freqs, h_sky, params) * align_time for h_sky, params, align_time in zip(h_sky_list, params_list, align_time_list)]
+        h_dec = jnp.sum(h_dec_list, axis=0)
+        assert h_dec.shape == freqs.shape, "The summed waveform has the wrong shape"
+        match_filter_SNR = (
+            4 * jnp.sum((jnp.conj(h_dec) * detector.data) / detector.psd * df).real
+        )
+        optimal_SNR = 4 * jnp.sum(jnp.conj(h_dec) * h_dec / detector.psd * df).real
+        log_likelihood += match_filter_SNR - optimal_SNR / 2
 
-class DoubleTransientLikelihoodFD(SingleEventLiklihood):
+    return log_likelihood
+
+class OverlappingTransientLikelihoodFD(SingleEventLiklihood):
     def __init__(
         self,
         detectors: list[Detector],
@@ -128,6 +153,21 @@ class DoubleTransientLikelihoodFD(SingleEventLiklihood):
         self.trigger_time = trigger_time
         self.duration = duration
         self.post_trigger_duration = post_trigger_duration
+        self.kwargs = kwargs
+        
+        # Here comes functionality for fixing params, thanks to Peter (see: https://github.com/tsunhopang/jim/blob/241973705b092d94ea384785b1110d53b4999843/src/jimgw/single_event/likelihood.py)
+        self.param_func = lambda x: x
+        self.likelihood_function = original_overlapping_likelihood
+        
+        # the fixing_parameters is expected to be a dictionary
+        # with key as parameter name and value is the fixed value
+        # e.g. {'M_c': 1.1975, 't_c': 0}
+        if "fixing_parameters" in self.kwargs:
+            fixing_parameters = self.kwargs["fixing_parameters"]
+            print(f"Parameters are fixed {fixing_parameters}")
+            self.fixing_func = lambda x: {**x, **fixing_parameters}
+        else:
+            self.fixing_func = lambda x: x
 
     @property
     def epoch(self):
@@ -149,11 +189,36 @@ class DoubleTransientLikelihoodFD(SingleEventLiklihood):
         """
         Extract the parameters for the two components of the binary.
         """
-        params_1 = {key[:-2]: params[key] for key in params if key[-1] == "1"}
-        params_2 = {key[:-2]: params[key] for key in params if key[-1] == "2"}
-        params_1["gmst"] = self.gmst
-        params_2["gmst"] = self.gmst
-        return params_1, params_2
+        # Gather the signals separately: 
+        separate_dicts = defaultdict(dict)
+
+        # Regular expression to extract the integer at the end of the key
+        pattern = re.compile(r'(.+?)_(\d+)$')
+
+        for key, value in params.items():
+            match_ = pattern.search(key)
+            if match_:
+                # Extract the base key and the integer part
+                base_key = match_.group(1)
+                idx = match_.group(2)
+                # Add the key-value pair to the corresponding dictionary with the base key
+                separate_dicts[idx][base_key] = value
+                            
+        # Compute and add the t_c values for the "later" signals:
+        t_c_1 = separate_dicts["1"]["t_c"]
+        for idx in separate_dicts.keys():
+            if idx == "1":
+                continue
+            separate_dicts[idx][f"t_c"] = t_c_1 + separate_dicts[idx][f"dt"]
+
+        # Add gmst to all separate_dicts
+        for idx in separate_dicts.keys():
+            separate_dicts[idx]["gmst"] = self.gmst
+
+        # Convert to list of dictionaries
+        params_list = [dict(new_dict) for new_dict in separate_dicts.values()]
+        
+        return params_list
 
     def evaluate(self, params: dict[str, Float], data: dict) -> Float:
         # TODO: Test whether we need to pass data in or with class changes is fine.
@@ -164,73 +229,26 @@ class DoubleTransientLikelihoodFD(SingleEventLiklihood):
         frequencies = self.frequencies
         df = frequencies[1] - frequencies[0]
         params["gmst"] = self.gmst
-        params_1, params_2 = self.extract_params(params)
         
-        print("params_1")
-        print(params_1)
+        # Extract the parameters for each signal, compute waveform, align time, and get detector response
+        params_list = self.extract_params(params)
+        waveform_sky_list = [self.waveform(frequencies, params) for params in params_list]
+        align_time_list = [jnp.exp(
+            -1j * 2 * jnp.pi * frequencies * (self.epoch + params[f"t_c"])
+        ) for params in params_list]
+        waveform_dec_list = [detector.fd_response(frequencies, waveform_sky, params) * align_time for detector, waveform_sky, params, align_time in zip(self.detectors, waveform_sky_list, params_list, align_time_list)]
         
-        print("params_2")
-        print(params_2)
+        # Sum all the signals together
+        waveform_dec_list = jnp.array(waveform_dec_list)
+        waveform_dec = jnp.sum(waveform_dec_list, axis = 0)
 
-        waveform_sky_1 = self.waveform(frequencies, params_1)
-        waveform_sky_2 = self.waveform(frequencies, params_2)
-        align_time_1 = jnp.exp(
-            -1j * 2 * jnp.pi * frequencies * (self.epoch + params["t_c"])
-        ) 
-        align_time_2 = jnp.exp(
-            -1j
-            * 2
-            * jnp.pi
-            * frequencies
-            * (self.epoch + params["t_c"] + params["dt"])
-        )
-
+        # Compute the likelihood
         for detector in self.detectors:
-            waveform_dec_1 = (
-                detector.fd_response(frequencies, waveform_sky_1, params_1)
-                * align_time_1
+            match_filter_SNR = (
+                4 * jnp.sum((jnp.conj(waveform_dec) * detector.data) / detector.psd * df).real
             )
-            waveform_dec_2 = (
-                detector.fd_response(frequencies, waveform_sky_2, params_2)
-                * align_time_2
-            )
-            match_filter_SNR_1 = (
-                4
-                * jnp.sum(
-                    (jnp.conj(waveform_dec_1) * detector.data) / detector.psd * df
-                ).real
-            )
-            match_filter_SNR_2 = (
-                4
-                * jnp.sum(
-                    (jnp.conj(waveform_dec_2) * detector.data) / detector.psd * df
-                ).real
-            )
-            cross_term_1_2 = (
-                4
-                * jnp.sum(
-                    (jnp.conj(waveform_dec_1) * waveform_dec_2) / detector.psd * df
-                ).real
-            )
-            optimal_SNR_1 = (
-                4
-                * jnp.sum(
-                    jnp.conj(waveform_dec_1) * waveform_dec_1 / detector.psd * df
-                ).real
-            )
-            optimal_SNR_2 = (
-                4
-                * jnp.sum(
-                    jnp.conj(waveform_dec_2) * waveform_dec_2 / detector.psd * df
-                ).real
-            )
-            log_likelihood += (
-                match_filter_SNR_1
-                - optimal_SNR_1 / 2
-                + match_filter_SNR_2
-                - optimal_SNR_2 / 2
-                - cross_term_1_2
-            )
+            optimal_SNR = 4 * jnp.sum(jnp.conj(waveform_dec) * waveform_dec / detector.psd * df).real
+            log_likelihood += match_filter_SNR - optimal_SNR / 2
         return log_likelihood
 
 
