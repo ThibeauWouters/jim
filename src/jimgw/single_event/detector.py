@@ -844,7 +844,8 @@ class TriangularGroundBased3G(Detector):
     def set_psd(self,
                 psd_file_dict: dict,
                 csd_file_dict: dict,
-                rescale_psd_file: str = "") -> None:
+                rescale_psd_file: str = "",
+                rescale_psd_type: str = "downscale") -> None:
         
         # TODO: this is a bit hacky, improve!
         
@@ -862,9 +863,19 @@ class TriangularGroundBased3G(Detector):
             ratios_interpolated = jnp.interp(self.frequencies, f_rescale, ratio_rescale)
             
             # Rescale
-            E1_psd *= ratios_interpolated
-            E2_psd *= ratios_interpolated
-            E3_psd *= ratios_interpolated
+            if rescale_psd_type == "upscale":
+                # upscale: increase PSD with ratio (assuming ratios are positive for now)
+                print("We are upscaling the PSDs")
+                E1_psd *= ratios_interpolated
+                E2_psd *= ratios_interpolated
+                E3_psd *= ratios_interpolated
+            else:
+                # downscale: decrease PSD with ratio (assuming ratios are positive for now)
+                print("We are downscaling the PSDs")
+                E1_psd /= ratios_interpolated
+                E2_psd /= ratios_interpolated
+                E3_psd /= ratios_interpolated
+                
             
         # TODO: bit cumbersome, can improve this?
         if np.median(E1_psd) > 1e-30: 
