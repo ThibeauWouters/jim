@@ -841,6 +841,67 @@ class TriangularGroundBased3G(Detector):
         self.match_filter_SNR = match_filter_SNR
 
     @jaxtyped
+    def set_psd(self,
+                psd_file_dict: dict,
+                csd_file_dict: dict,
+                rescale_psd_file: str = "") -> None:
+        
+        # TODO: this is a bit hacky, improve!
+        
+        # Load the PSD files
+        E1_psd = self.load_psd(self.frequencies, psd_file_dict['E1'])
+        E2_psd = self.load_psd(self.frequencies, psd_file_dict['E2'])
+        E3_psd = self.load_psd(self.frequencies, psd_file_dict['E3'])
+        
+        # Change the PSD here with the rescaling if desired
+        if len(rescale_psd_file) > 0:
+            print(f"We are going to rescale the PSDs with the file: {rescale_psd_file}")
+            
+            # Load the ratios and interpolate to the given frequencies
+            f_rescale, ratio_rescale = np.loadtxt(rescale_psd_file, unpack=True)
+            ratios_interpolated = jnp.interp(self.frequencies, f_rescale, ratio_rescale)
+            
+            # Rescale
+            E1_psd *= ratios_interpolated
+            E2_psd *= ratios_interpolated
+            E3_psd *= ratios_interpolated
+            
+        # TODO: bit cumbersome, can improve this?
+        if np.median(E1_psd) > 1e-30: 
+            print(f"E1_psd is likely ASD, not PSD, squaring it.")
+            E1_psd = E1_psd**2
+            
+        if np.median(E2_psd) > 1e-30: 
+            print(f"E2_psd is likely ASD, not PSD, squaring it.")
+            E2_psd = E2_psd**2
+            
+        if np.median(E3_psd) > 1e-30: 
+            print(f"E3_psd is likely ASD, not PSD, squaring it.")
+            E3_psd = E3_psd**2
+
+        E12_csd = self.load_csd(self.frequencies, csd_file_dict['E12'])
+        E23_csd = self.load_csd(self.frequencies, csd_file_dict['E23'])
+        E13_csd = self.load_csd(self.frequencies, csd_file_dict['E13'])
+
+        if np.median(E12_csd) > 1e-30: 
+            print(f"E12_csd is likely ASD, not PSD, squaring it.")
+            E12_csd = E12_csd**2
+            
+        if np.median(E23_csd) > 1e-30: 
+            print(f"E23_csd is likely ASD, not PSD, squaring it.")
+            E23_csd = E23_csd**2
+            
+        if np.median(E3_psd) > 1e-30: 
+            print(f"E13_csd is likely ASD, not PSD, squaring it.")
+            E13_csd = E13_csd**2
+
+        psd = jnp.array([[E1_psd, E12_csd, E13_csd],
+                        [E12_csd.conj(), E2_psd, E23_csd],
+                        [E13_csd.conj(), E23_csd.conj(), E3_psd]])
+        
+        self.psd = jnp.einsum('ijk->kij', psd)
+
+    @jaxtyped
     def load_psd(
         self, freqs: Float[Array, " n_sample"], psd_file: str = ""
     ) -> Float[Array, " n_sample"]:
@@ -920,6 +981,33 @@ ET = TriangularGroundBased3G(
     yarm_tilt=0,
     elevation=0,
     mode='pc',
+)
+
+# ET L configurations
+
+# mri
+ETL1 = GroundBased2G(
+    "ETL1",
+    latitude=0.885284,
+    longitude=0.103333,
+    xarm_azimuth=0.4462353,
+    yarm_azimuth=2.017032,
+    xarm_tilt=0,
+    yarm_tilt=0,
+    elevation=0, # NOTE: just putting this to zero here
+    mode="pc",
+)
+
+ETL2 = GroundBased2G(
+    "ETL2",
+    latitude=0.707149,
+    longitude=0.164352,
+    xarm_azimuth=1.231633,
+    yarm_azimuth=2.80243,
+    xarm_tilt=0,
+    yarm_tilt=0,
+    elevation=0, # NOTE: just putting this to zero here
+    mode="pc",
 )
 
 detector_preset = {
