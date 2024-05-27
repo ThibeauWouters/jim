@@ -77,7 +77,7 @@ class TransientLikelihoodFD(SingleEventLiklihood):
         params["gmst"] = self.gmst
         waveform_sky = self.waveform(frequencies, params)
         align_time = jnp.exp(
-            -1j * 2 * jnp.pi * frequencies * (self.epoch + params["t_c"])
+            -1j * 2 * jnp.pi * frequencies * (self.epoch + params["t_c_1"])
         )
         for detector in self.detectors:
             waveform_dec = (
@@ -128,6 +128,18 @@ class DoubleTransientLikelihoodFD(SingleEventLiklihood):
         self.trigger_time = trigger_time
         self.duration = duration
         self.post_trigger_duration = post_trigger_duration
+        self.kwargs = kwargs
+        
+        # the fixing_parameters is expected to be a dictionary
+        # with key as parameter name and value is the fixed value
+        # e.g. {'M_c': 1.1975, 't_c': 0}
+        if "fixing_parameters" in self.kwargs:
+            print("Note: likelihood will fix some parameters!")
+            fixing_parameters = self.kwargs["fixing_parameters"]
+            print(f"Parameters are fixed {fixing_parameters}")
+            self.fixing_func = lambda x: {**x, **fixing_parameters}
+        else:
+            self.fixing_func = lambda x: x
 
     @property
     def epoch(self):
@@ -155,43 +167,30 @@ class DoubleTransientLikelihoodFD(SingleEventLiklihood):
         params_2["gmst"] = self.gmst
         return params_1, params_2
 
-    def evaluate(self, params: dict[str, Float], data: dict) -> Float:
+    def evaluate_original(self, 
+                          params_1: dict[str, Float], 
+                          params_2: dict[str, Float], 
+                          h_sky_1: dict[str, Float[Array, " n_dim"]],
+                          h_sky_2: dict[str, Float[Array, " n_dim"]],
+                          detectors: list[Detector],
+                          freqs: Float[Array, " n_dim"],
+                          align_time_1: Float,
+                          align_time_2: Float,
+                          **kwargs,) -> Float:
         # TODO: Test whether we need to pass data in or with class changes is fine.
         """
         Evaluate the likelihood for a given set of parameters.
         """
-        log_likelihood = 0
-        frequencies = self.frequencies
-        df = frequencies[1] - frequencies[0]
-        params["gmst"] = self.gmst
-        params_1, params_2 = self.extract_params(params)
-        
-        print("params_1")
-        print(params_1)
-        
-        print("params_2")
-        print(params_2)
+        log_likelihood = 0.0
+        df = freqs[1] - freqs[0]
 
-        waveform_sky_1 = self.waveform(frequencies, params_1)
-        waveform_sky_2 = self.waveform(frequencies, params_2)
-        align_time_1 = jnp.exp(
-            -1j * 2 * jnp.pi * frequencies * (self.epoch + params["t_c"])
-        ) 
-        align_time_2 = jnp.exp(
-            -1j
-            * 2
-            * jnp.pi
-            * frequencies
-            * (self.epoch + params["t_c"] + params["dt"])
-        )
-
-        for detector in self.detectors:
+        for detector in detectors:
             waveform_dec_1 = (
-                detector.fd_response(frequencies, waveform_sky_1, params_1)
+                detector.fd_response(freqs, h_sky_1, params_1)
                 * align_time_1
             )
             waveform_dec_2 = (
-                detector.fd_response(frequencies, waveform_sky_2, params_2)
+                detector.fd_response(freqs, h_sky_2, params_2)
                 * align_time_2
             )
             match_filter_SNR_1 = (
@@ -231,6 +230,38 @@ class DoubleTransientLikelihoodFD(SingleEventLiklihood):
                 - optimal_SNR_2 / 2
                 - cross_term_1_2
             )
+        return log_likelihood
+    
+    def evaluate(self, params: dict[str, Float], data: dict) -> Float:
+        # TODO: Test whether we need to pass data in or with class changes is fine.
+        """
+        Evaluate the likelihood for a given set of parameters.
+        """
+        frequencies = self.frequencies
+        params["gmst"] = self.gmst
+        # adjust the params due to fixing parameters
+        params = self.fixing_func(params)
+        params_1, params_2 = self.extract_params(params)
+        # evaluate the waveform as usual
+        waveform_sky_1 = self.waveform(frequencies, params_1)
+        waveform_sky_2 = self.waveform(frequencies, params_2)
+        align_time_1 = jnp.exp(
+            -1j * 2 * jnp.pi * frequencies * (self.epoch + params["t_c_1"])
+        )
+        align_time_2 = jnp.exp(
+            -1j * 2 * jnp.pi * frequencies * (self.epoch + params["t_c_1"] + params["dt"])
+        )
+        log_likelihood = self.evaluate_original(
+            params_1,
+            params_2,
+            waveform_sky_1,
+            waveform_sky_2,
+            self.detectors,
+            frequencies,
+            align_time_1,
+            align_time_2,
+            **self.kwargs,
+        )
         return log_likelihood
 
 
