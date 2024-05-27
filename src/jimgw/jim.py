@@ -46,6 +46,7 @@ class Jim(object):
     def __init__(self, likelihood: LikelihoodBase, prior: Prior, **kwargs):
         self.Likelihood = likelihood
         self.Prior = prior
+        self.Transform = kwargs.get("transform", lambda x: x)
 
         # Set and override any given hyperparameters, and save as attribute
         self.hyperparameters = default_hyperparameters
@@ -105,9 +106,10 @@ class Jim(object):
     def posterior(self, params: Float[Array, " n_dim"], data: dict):
         prior_params = self.Prior.add_name(params.T)
         prior = self.Prior.log_prob(prior_params)
-        return (
-            self.Likelihood.evaluate(self.Prior.transform(prior_params), data) + prior
-        )
+        prior_params = self.Prior.transform(prior_params)
+        prior_params = self.Transform(prior_params)
+
+        return self.Likelihood.evaluate(prior_params, data) + prior
 
     def sample(self, key: PRNGKeyArray, initial_guess: Array = jnp.array([])):
         if initial_guess.size == 0:
