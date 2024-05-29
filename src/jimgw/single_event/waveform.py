@@ -130,10 +130,11 @@ class RippleIMRPhenomD_NRTidalv2(Waveform):
     def __init__(self, 
                  f_ref: float = 20.0, 
                  use_lambda_tildes: bool = False,
-                 stop: str = "None"):
+                 no_taper: bool = False,):
+        
         self.f_ref = f_ref
         self.use_lambda_tildes = use_lambda_tildes
-        self.stop = stop
+        self.no_taper = no_taper
 
     def __call__(self, frequency: Array, params: dict) -> dict:
         output = {}
@@ -160,7 +161,7 @@ class RippleIMRPhenomD_NRTidalv2(Waveform):
             params["iota"],
         ]
         
-        hp, hc = gen_IMRPhenomD_NRTidalv2(frequency, theta, self.f_ref, use_lambda_tildes=self.use_lambda_tildes, stop=self.stop)
+        hp, hc = gen_IMRPhenomD_NRTidalv2(frequency, theta, self.f_ref, use_lambda_tildes=self.use_lambda_tildes, no_taper = self.no_taper)
         output["p"] = hp
         output["c"] = hc
         return output

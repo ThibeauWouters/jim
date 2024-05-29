@@ -320,16 +320,17 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         print(self.ref_params)
 
         # Sanity check for lambdas before proceeding:
-        if self.ref_params["lambda_1"] <= 0.0 and self.ref_params["lambda_2"] > 0:
-            self.ref_params["lambda_1"] = self.ref_params["lambda_2"]
-        elif self.ref_params["lambda_1"] > 0.0 and self.ref_params["lambda_2"] <= 0:
-            self.ref_params["lambda_2"] = self.ref_params["lambda_1"]
-        elif self.ref_params["lambda_1"] <= 0.0 and self.ref_params["lambda_2"] <= 0:
-            print(
-                "WARNIGN: Both lambdas found to be zero or negative. Setting both to 1.0."
-            )
-            self.ref_params["lambda_1"] = 1.0
-            self.ref_params["lambda_2"] = 1.0
+        if "lambda_1" in self.ref_params and "lambda_2" in self.ref_params:
+            if self.ref_params["lambda_1"] <= 0.0 and self.ref_params["lambda_2"] > 0:
+                self.ref_params["lambda_1"] = self.ref_params["lambda_2"]
+            elif self.ref_params["lambda_1"] > 0.0 and self.ref_params["lambda_2"] <= 0:
+                self.ref_params["lambda_2"] = self.ref_params["lambda_1"]
+            elif self.ref_params["lambda_1"] <= 0.0 and self.ref_params["lambda_2"] <= 0:
+                print(
+                    "WARNIGN: Both lambdas found to be zero or negative. Setting both to 1.0."
+                )
+                self.ref_params["lambda_1"] = 1.0
+                self.ref_params["lambda_2"] = 1.0
 
         print("Constructing reference waveforms..")
 
