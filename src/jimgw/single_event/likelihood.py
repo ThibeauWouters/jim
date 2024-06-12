@@ -77,7 +77,7 @@ class TransientLikelihoodFD(SingleEventLiklihood):
         params["gmst"] = self.gmst
         waveform_sky = self.waveform(frequencies, params)
         align_time = jnp.exp(
-            -1j * 2 * jnp.pi * frequencies * (self.epoch + params["t_c_1"])
+            -1j * 2 * jnp.pi * frequencies * (self.epoch + params["t_c"])
         )
         for detector in self.detectors:
             waveform_dec = (
