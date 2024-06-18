@@ -267,7 +267,7 @@ class Sphere(Prior):
         phi = x[self.naming[1]]
         mag = x[self.naming[2]]
         output = jnp.where(
-            (mag > 1) | (mag < 0) | (phi > 2* jnp.pi) | (phi < 0) | (theta > 1) | (theta < -1),
+            (mag > 1) | (mag < 0) | (phi > 2 * jnp.pi) | (phi < 0) | (theta > 1) | (theta < -1),
             jnp.zeros_like(0) - jnp.inf,
             jnp.log(mag**2 * jnp.sin(x[self.naming[0]])),
         )
@@ -503,3 +503,56 @@ class Composite(Prior):
         for prior in self.priors:
             output += prior.log_prob(x)
         return output
+
+
+@jaxtyped
+class DeltaPrior(Prior):
+    """
+    A prior that represents a delta function.
+    """
+
+    value: Float
+
+    def __repr__(self):
+        return f"DeltaPrior(value={self.value}, naming={self.naming})"
+
+    def __init__(
+        self,
+        value: Float,
+        naming: list[str],
+        transforms: dict[str, tuple[str, Callable]] = {},
+        **kwargs,
+    ):
+        super().__init__(naming, transforms)
+        assert self.n_dim == 1, "DeltaPrior needs to be 1D distributions"
+        self.value = value
+
+    def sample(
+        self, rng_key: PRNGKeyArray, n_samples: int
+    ) -> dict[str, Float[Array, " n_samples"]]:
+        """
+        Sample from a delta distribution.
+
+        Parameters
+        ----------
+        rng_key : PRNGKeyArray
+            A random key to use for sampling.
+        n_samples : int
+            The number of samples to draw.
+
+        Returns
+        -------
+        samples : dict
+            Samples from the distribution. The keys are the names of the parameters.
+        """
+        samples = jnp.full((n_samples,), self.value)
+        return self.add_name(samples[None])
+
+    def log_prob(self, x: dict[str, Float]) -> Float:
+        variable = x[self.naming[0]]
+        log_p = jnp.where(
+            variable == self.value,
+            jnp.zeros_like(variable),
+            jnp.zeros_like(variable) - jnp.inf,
+        )
+        return log_p
