@@ -177,7 +177,6 @@ class DoubleTransientLikelihoodFD(SingleEventLiklihood):
                           align_time_1: Float,
                           align_time_2: Float,
                           **kwargs,) -> Float:
-        # TODO: Test whether we need to pass data in or with class changes is fine.
         """
         Evaluate the likelihood for a given set of parameters.
         """
@@ -233,7 +232,6 @@ class DoubleTransientLikelihoodFD(SingleEventLiklihood):
         return log_likelihood
     
     def evaluate(self, params: dict[str, Float], data: dict) -> Float:
-        # TODO: Test whether we need to pass data in or with class changes is fine.
         """
         Evaluate the likelihood for a given set of parameters.
         """
@@ -498,7 +496,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         self, params: dict[str, Float], data: dict
     ) -> (
         Float
-    ):  # TODO: Test whether we need to pass data in or with class changes is fine.
+    ):
         """
         Evaluate the likelihood for a given set of parameters.
         """
@@ -729,6 +727,8 @@ class HeterodynedDoubleTransientLikelihoodFD(DoubleTransientLikelihoodFD):
         frequency_original = self.frequencies
         # Get the grid of the relative binning scheme (contains the final endpoint)
         # and the center points
+        
+        # TODO: the binning scheme assumes a single inspiral, could this impact the results?
         freq_grid, self.freq_grid_center = self.make_binning_scheme(
             np.array(frequency_original), n_bins
         )
@@ -753,17 +753,18 @@ class HeterodynedDoubleTransientLikelihoodFD(DoubleTransientLikelihoodFD):
         print("Ref params used:")
         print(self.ref_params)
 
-        # Sanity check for lambdas before proceeding:
-        if self.ref_params["lambda_1"] <= 0.0 and self.ref_params["lambda_2"] > 0:
-            self.ref_params["lambda_1"] = self.ref_params["lambda_2"]
-        elif self.ref_params["lambda_1"] > 0.0 and self.ref_params["lambda_2"] <= 0:
-            self.ref_params["lambda_2"] = self.ref_params["lambda_1"]
-        elif self.ref_params["lambda_1"] <= 0.0 and self.ref_params["lambda_2"] <= 0:
-            print(
-                "WARNIGN: Both lambdas found to be zero or negative. Setting both to 1.0."
-            )
-            self.ref_params["lambda_1"] = 1.0
-            self.ref_params["lambda_2"] = 1.0
+        ### Sanity check for lambdas before proceeding:
+        ### TODO: implement this for the 2 signals once we actually go to BNS
+        # if self.ref_params["lambda_1"] <= 0.0 and self.ref_params["lambda_2"] > 0:
+        #     self.ref_params["lambda_1"] = self.ref_params["lambda_2"]
+        # elif self.ref_params["lambda_1"] > 0.0 and self.ref_params["lambda_2"] <= 0:
+        #     self.ref_params["lambda_2"] = self.ref_params["lambda_1"]
+        # elif self.ref_params["lambda_1"] <= 0.0 and self.ref_params["lambda_2"] <= 0:
+        #     print(
+        #         "WARNIGN: Both lambdas found to be zero or negative. Setting both to 1.0."
+        #     )
+        #     self.ref_params["lambda_1"] = 1.0
+        #     self.ref_params["lambda_2"] = 1.0
 
         print("Constructing reference waveforms..")
 
@@ -783,9 +784,9 @@ class HeterodynedDoubleTransientLikelihoodFD(DoubleTransientLikelihoodFD):
         h_sky_2 = self.reference_waveform(frequency_original, params_2)
 
         # Get frequency masks to be applied, for both original
-        # and heterodyne frequency grid
+        # and heterodyne frequency grid -- check both WFs
         h_amp = jnp.sum(
-            jnp.array([jnp.abs(h_sky_1[key]) for key in h_sky_1.keys()]), axis=0
+            jnp.array([jnp.abs(h_sky_1[key]) * h_sky_2[key] for key in h_sky_1.keys()]), axis=0
         )
         f_valid = frequency_original[jnp.where(h_amp > 0)[0]]
         f_max = jnp.max(f_valid)
@@ -812,59 +813,81 @@ class HeterodynedDoubleTransientLikelihoodFD(DoubleTransientLikelihoodFD):
         h_sky_center_2 = self.reference_waveform(self.freq_grid_center, params_2)
 
         # Get phase shifts to align time of coalescence
-        align_time = jnp.exp(
+        align_time_1 = jnp.exp(
             -1j
             * 2
             * jnp.pi
             * frequency_original
-            * (self.epoch + self.ref_params["t_c"])
+            * (self.epoch + self.ref_params["t_c_1"])
         )
-        align_time_low = jnp.exp(
+        align_time_low_1 = jnp.exp(
             -1j
             * 2
             * jnp.pi
             * self.freq_grid_low
-            * (self.epoch + self.ref_params["t_c"])
+            * (self.epoch + self.ref_params["t_c_1"])
         )
-        align_time_center = jnp.exp(
+        align_time_center_1 = jnp.exp(
             -1j
             * 2
             * jnp.pi
             * self.freq_grid_center
-            * (self.epoch + self.ref_params["t_c"])
+            * (self.epoch + self.ref_params["t_c_1"])
+        )
+        
+        align_time_2 = jnp.exp(
+            -1j
+            * 2
+            * jnp.pi
+            * frequency_original
+            * (self.epoch + self.ref_params["t_c_1"] + self.ref_params["dt"])
+        )
+        align_time_low_2 = jnp.exp(
+            -1j
+            * 2
+            * jnp.pi
+            * self.freq_grid_low
+            * (self.epoch + self.ref_params["t_c_1"] + self.ref_params["dt"])
+        )
+        align_time_center_2 = jnp.exp(
+            -1j
+            * 2
+            * jnp.pi
+            * self.freq_grid_center
+            * (self.epoch + self.ref_params["t_c_1"] + self.ref_params["dt"])
         )
 
         for detector in self.detectors:
             # Get the reference waveforms
             waveform_ref_1 = (
                 detector.fd_response(frequency_original, h_sky_1, params_1)
-                * align_time
+                * align_time_1
             )
             waveform_ref_2 = (
                 detector.fd_response(frequency_original, h_sky_2, params_2)
-                * align_time
+                * align_time_2
             )
             self.waveform_low_ref_1[detector.name] = (
                 detector.fd_response(self.freq_grid_low, h_sky_low_1, params_1)
-                * align_time_low
+                * align_time_low_1
             )
             self.waveform_center_ref_1[detector.name] = (
                 detector.fd_response(
                     self.freq_grid_center, h_sky_center_1, params_1
                 )
-                * align_time_center
+                * align_time_center_1
             )
             self.waveform_low_ref_2[detector.name] = (
                 detector.fd_response(self.freq_grid_low, h_sky_low_2, params_2)
-                * align_time_low
+                * align_time_low_2
             )
             self.waveform_center_ref_2[detector.name] = (
                 detector.fd_response(
                     self.freq_grid_center, h_sky_center_2, params_2
                 )
-                * align_time_center
+                * align_time_center_2
             )
-            A0, A1, B0, B1 = self.compute_coefficients(
+            A0, A1, B0, B1 = HeterodynedTransientLikelihoodFD.compute_coefficients(
                 detector.data,
                 waveform_ref_1 + waveform_ref_2,
                 detector.psd,
