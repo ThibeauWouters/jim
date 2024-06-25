@@ -373,6 +373,7 @@ class GroundBased2G(Detector):
         h_sky: dict[str, Float[Array, " n_sample"]],
         params: dict[str, Float],
         psd_file: str = "",
+        square_psd: bool = False,
         noise_free: bool = False,
     ) -> None:
         """
@@ -466,7 +467,7 @@ class GroundBased2G(Detector):
 
     @jaxtyped
     def load_psd(
-        self, freqs: Float[Array, " n_sample"], psd_file: str = ""
+        self, freqs: Float[Array, " n_sample"], psd_file: str = "", square_psd: bool = False
     ) -> Float[Array, " n_sample"]:
         if psd_file == "":
             print("Grabbing GWTC-2 PSD for " + self.name)
@@ -477,6 +478,9 @@ class GroundBased2G(Detector):
             psd_vals = asd_vals**2
         else:
             f, psd_vals = np.loadtxt(psd_file, unpack=True)
+            if square_psd:
+                print("NOTE: Squaring the PSD values.")
+                psd_vals = psd_vals**2
 
         psd = interp1d(f, psd_vals, fill_value=(psd_vals[0], psd_vals[-1]))(freqs)  # type: ignore
         psd = jnp.array(psd)

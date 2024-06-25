@@ -2,7 +2,7 @@ from jaxtyping import Array, Float
 from ripple.waveforms.IMRPhenomD import gen_IMRPhenomD_hphc
 from ripple.waveforms.IMRPhenomPv2 import gen_IMRPhenomPv2_hphc
 from ripple.waveforms.TaylorF2 import gen_TaylorF2_hphc
-from ripple.waveforms.IMRPhenomD_NRTidalv2 import gen_IMRPhenomD_NRTidalv2
+from ripple.waveforms.IMRPhenomD_NRTidalv2 import gen_IMRPhenomD_NRTidalv2_hphc
 from abc import ABC
 import jax.numpy as jnp
 
@@ -161,7 +161,7 @@ class RippleIMRPhenomD_NRTidalv2(Waveform):
             params["iota"],
         ]
         
-        hp, hc = gen_IMRPhenomD_NRTidalv2(frequency, theta, self.f_ref, use_lambda_tildes=self.use_lambda_tildes, no_taper = self.no_taper)
+        hp, hc = gen_IMRPhenomD_NRTidalv2_hphc(frequency, theta, self.f_ref, use_lambda_tildes=self.use_lambda_tildes, no_taper = self.no_taper)
         output["p"] = hp
         output["c"] = hc
         return output
