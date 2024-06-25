@@ -73,7 +73,7 @@ class Jim(object):
                 self.posterior, True, local_sampler_arg
             )  # Remember to add routine to find automated mass matrix
         else:   
-            raise ValueError(f"Local sampler {which_local_sampler} not recognized")
+            raise ValueError(f"Local sampler {self.hyperparameters["which_local_sampler"]} not recognized")
 
         flowHMC_params = kwargs.get("flowHMC_params", {})
         model = MaskedCouplingRQSpline(

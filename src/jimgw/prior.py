@@ -4,6 +4,7 @@ from flowMC.nfmodel.base import Distribution
 from jaxtyping import Array, Float, Int, PRNGKeyArray, jaxtyped
 from typing import Callable, Union
 from dataclasses import field
+from jax.scipy.stats import gaussian_kde
 
 
 class Prior(Distribution):
@@ -17,23 +18,23 @@ class Prior(Distribution):
     """
 
     naming: list[str]
-    transforms: dict[str, tuple[str, Callable]] = field(default_factory=dict)
+    transforms: dict[tuple[str], tuple[tuple[str], Callable]] = field(default_factory=dict)
 
     @property
     def n_dim(self):
         return len(self.naming)
 
     def __init__(
-        self, naming: list[str], transforms: dict[str, tuple[str, Callable]] = {}
+        self, naming: tuple[str], transforms: dict[tuple[str], tuple[tuple[str], Callable]] = {}
     ):
         """
         Parameters
         ----------
         naming : list[str]
             A list of names for the parameters of the prior.
-        transforms : dict[tuple[str,Callable]]
+        transforms : dict[tuple[list[str],Callable]]
             A dictionary of transforms to apply to the parameters. The keys are
-            the names of the parameters and the values are a tuple of the name
+            the lists of the names of the parameters and the values are a tuple of the name
             of the transform and the transform itself.
         """
         self.naming = naming
@@ -43,14 +44,14 @@ class Prior(Distribution):
             return lambda x: x[name]
 
         for name in naming:
-            if name in transforms:
-                self.transforms[name] = transforms[name]
+            if any(name in key for key in transforms.keys()):
+                self.transforms[(name, )] = transforms[(name, )]
             else:
                 # Without the function, the lambda will refer to the variable name instead of its value,
                 # which will make lambda reference the last value of the variable name
-                self.transforms[name] = (name, make_lambda(name))
+                self.transforms[(name, )] = (name, make_lambda(name))
 
-    def transform(self, x: dict[str, Float]) -> dict[str, Float]:
+    def transform(self, x: dict[tuple[str], Float]) -> dict[tuple[str], Float]:
         """
         Apply the transforms to the parameters.
 
@@ -103,7 +104,7 @@ class Uniform(Prior):
         xmin: Float,
         xmax: Float,
         naming: list[str],
-        transforms: dict[str, tuple[str, Callable]] = {},
+        transforms: dict[tuple[str], tuple[tuple[str], Callable]] = {},
         **kwargs,
     ):
         super().__init__(naming, transforms)
@@ -158,7 +159,7 @@ class Unconstrained_Uniform(Prior):
         xmin: Float,
         xmax: Float,
         naming: list[str],
-        transforms: dict[str, tuple[str, Callable]] = {},
+        transforms: dict[tuple[str], tuple[tuple[str], Callable]] = {},
         **kwargs,
     ):
         super().__init__(naming, transforms)
@@ -169,10 +170,10 @@ class Unconstrained_Uniform(Prior):
 
         def new_transform(param):
             param[self.naming[0]] = self.to_range(param[self.naming[0]])
-            return local_transform[self.naming[0]][1](param)
+            return local_transform[tuple(self.naming[0])][1](param)
 
         self.transforms = {
-            self.naming[0]: (local_transform[self.naming[0]][0], new_transform)
+            tuple(self.naming[0]): (local_transform[tuple(self.naming[0])][0], new_transform)
         }
 
     def to_range(self, x: Float) -> Float:
@@ -233,19 +234,19 @@ class Sphere(Prior):
     def __init__(self, naming: str, **kwargs):
         self.naming = [f"{naming}_theta", f"{naming}_phi", f"{naming}_mag"]
         self.transforms = {
-            self.naming[0]: (
+            tuple(self.naming[0]): (
                 f"{naming}_x",
                 lambda params: jnp.sin(params[self.naming[0]])
                 * jnp.cos(params[self.naming[1]])
                 * params[self.naming[2]],
             ),
-            self.naming[1]: (
+            tuple(self.naming[1]): (
                 f"{naming}_y",
                 lambda params: jnp.sin(params[self.naming[0]])
                 * jnp.sin(params[self.naming[1]])
                 * params[self.naming[2]],
             ),
-            self.naming[2]: (
+            tuple(self.naming[2]): (
                 f"{naming}_z",
                 lambda params: jnp.cos(params[self.naming[0]]) * params[self.naming[2]],
             ),
@@ -477,7 +478,7 @@ class Composite(Prior):
     def __init__(
         self,
         priors: list[Prior],
-        transforms: dict[str, tuple[str, Callable]] = {},
+        transforms: dict[tuple[str], tuple[tuple[str], Callable]] = {},
         **kwargs,
     ):
         naming = []
@@ -487,6 +488,11 @@ class Composite(Prior):
             self.transforms.update(prior.transforms)
         self.priors = priors
         self.naming = naming
+        
+        # Update with any non-trivial transforms
+        for key, transforms in transforms.items():
+            if any(key in key for key in self.transforms.keys()):
+                del prior.transforms[key]
         self.transforms.update(transforms)
 
     def sample(
@@ -503,3 +509,31 @@ class Composite(Prior):
         for prior in self.priors:
             output += prior.log_prob(x)
         return output
+
+@jaxtyped
+class KDE(Prior):
+    kde: gaussian_kde
+
+    def __repr__(self):
+        return f"KDE"
+
+    def __init__(
+        self,
+        samples: Array,
+        naming: list[str],
+        transforms: dict[str, tuple[str, Callable]] = {},
+        **kwargs,
+    ):
+        
+        assert len(jnp.shape(samples)) == 1, "KDE prior only supports 1D distribution for now" # TODO: check the implementation for higher dimensions
+        super().__init__(naming, transforms)
+        self.kde = gaussian_kde(samples)
+        
+    def sample(
+        self, rng_key: PRNGKeyArray, n_samples: int
+    ) -> dict[str, Float[Array, " n_samples"]]:
+        samples = self.kde.resample(rng_key, shape=(n_samples,))
+        return self.add_name(samples)
+
+    def log_prob(self, x: dict[str, Float]) -> Float:
+        return self.kde(x[self.naming[0]])
