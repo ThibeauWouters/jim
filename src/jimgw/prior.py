@@ -4,6 +4,7 @@ from flowMC.nfmodel.base import Distribution
 from jaxtyping import Array, Float, Int, PRNGKeyArray, jaxtyped
 from typing import Callable, Union
 from dataclasses import field
+from jax.scipy.stats import gaussian_kde
 
 
 class Prior(Distribution):
@@ -503,3 +504,31 @@ class Composite(Prior):
         for prior in self.priors:
             output += prior.log_prob(x)
         return output
+
+@jaxtyped
+class KDE(Prior):
+    kde: gaussian_kde
+
+    def __repr__(self):
+        return f"KDE"
+
+    def __init__(
+        self,
+        samples: Array,
+        naming: list[str],
+        transforms: dict[str, tuple[str, Callable]] = {},
+        **kwargs,
+    ):
+
+        assert len(jnp.shape(samples)) == 1, "KDE prior only supports 1D distribution for now" # TODO: check the implementation for higher dimensions
+        super().__init__(naming, transforms)
+        self.kde = gaussian_kde(samples)
+
+    def sample(
+        self, rng_key: PRNGKeyArray, n_samples: int
+    ) -> dict[str, Float[Array, " n_samples"]]:
+        samples = self.kde.resample(rng_key, shape=(n_samples,))
+        return self.add_name(samples)
+
+    def log_prob(self, x: dict[str, Float]) -> Float:
+        return self.kde(x[self.naming[0]])
