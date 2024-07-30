@@ -786,7 +786,7 @@ class HeterodynedDoubleTransientLikelihoodFD(DoubleTransientLikelihoodFD):
         # Get frequency masks to be applied, for both original
         # and heterodyne frequency grid -- check both WFs
         h_amp = jnp.sum(
-            jnp.array([jnp.abs(h_sky_1[key]) * h_sky_2[key] for key in h_sky_1.keys()]), axis=0
+            jnp.array([jnp.abs(h_sky_1[key] * h_sky_2[key]) for key in h_sky_1.keys()]), axis=0
         )
         f_valid = frequency_original[jnp.where(h_amp > 0)[0]]
         f_max = jnp.max(f_valid)
@@ -809,6 +809,7 @@ class HeterodynedDoubleTransientLikelihoodFD(DoubleTransientLikelihoodFD):
 
         h_sky_low_1 = self.reference_waveform(self.freq_grid_low, params_1)
         h_sky_center_1 = self.reference_waveform(self.freq_grid_center, params_1)
+        
         h_sky_low_2 = self.reference_waveform(self.freq_grid_low, params_2)
         h_sky_center_2 = self.reference_waveform(self.freq_grid_center, params_2)
 
@@ -856,6 +857,15 @@ class HeterodynedDoubleTransientLikelihoodFD(DoubleTransientLikelihoodFD):
             * self.freq_grid_center
             * (self.epoch + self.ref_params["t_c_1"] + self.ref_params["dt"])
         )
+        
+        self.align_time_1 = align_time_1
+        self.align_time_2 = align_time_2
+        
+        self.align_time_low_1 = align_time_low_1
+        self.align_time_low_2 = align_time_low_2
+        
+        self.align_time_center_1 = align_time_center_1
+        self.align_time_center_2 = align_time_center_2
 
         for detector in self.detectors:
             # Get the reference waveforms
@@ -1034,21 +1044,37 @@ class HeterodynedDoubleTransientLikelihoodFD(DoubleTransientLikelihoodFD):
                 * align_time_center_2
             )
 
-            r0_1 = waveform_center_1 / self.waveform_center_ref_1[detector.name]
-            r1_1 = (waveform_low_1 / self.waveform_low_ref_1[detector.name] - r0_1) / (
-                frequencies_low - frequencies_center
-            )
-            r0_2 = waveform_center_2 / self.waveform_center_ref_2[detector.name]
-            r1_2 = (waveform_low_2 / self.waveform_low_ref_2[detector.name] - r0_2) / (
-                frequencies_low - frequencies_center
-            )
+            ### Old implementations
+            # r0_1 = waveform_center_1 / self.waveform_center_ref_1[detector.name]
+            # r0_2 = waveform_center_2 / self.waveform_center_ref_2[detector.name]
+            # r0 = r0_1 + r0_2
+            
+            # r1_1 = (waveform_low_1 / self.waveform_low_ref_1[detector.name] - r0_1) / (
+            #     frequencies_low - frequencies_center
+            # )
+            # r1_2 = (waveform_low_2 / self.waveform_low_ref_2[detector.name] - r0_2) / (
+            #     frequencies_low - frequencies_center
+            # )
+            # r1 = r1_1 + r1_2
+            
+            ### New implementation
+            waveform_center = waveform_center_1 + waveform_center_2
+            waveform_low = waveform_low_1 + waveform_low_2
+            
+            waveform_center_ref = self.waveform_center_ref_1[detector.name] + self.waveform_center_ref_2[detector.name]
+            waveform_low_ref = self.waveform_low_ref_1[detector.name] + self.waveform_low_ref_2[detector.name]
+            
+            r0 = waveform_center / waveform_center_ref
+            r1 = (waveform_low / waveform_low_ref - r0) / (
+                frequencies_low - frequencies_center)
+            
             match_filter_SNR = jnp.sum(
-                self.A0_array[detector.name] * (r0_1 + r0_2).conj()
-                + self.A1_array[detector.name] * (r1_1 + r1_2).conj()
+                self.A0_array[detector.name] * (r0).conj()
+                + self.A1_array[detector.name] * (r1).conj()
             )
             optimal_SNR = jnp.sum(
-                self.B0_array[detector.name] * jnp.abs(r0_1 + r0_2) ** 2
-                + 2 * self.B1_array[detector.name] * ((r0_1 + r0_2) * (r1_1 + r1_2).conj()).real
+                self.B0_array[detector.name] * jnp.abs(r0) ** 2
+                + 2 * self.B1_array[detector.name] * ((r0) * (r1).conj()).real
             )
             log_likelihood += (match_filter_SNR - optimal_SNR / 2).real
 
