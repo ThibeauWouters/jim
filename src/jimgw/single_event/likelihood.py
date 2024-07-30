@@ -1044,20 +1044,6 @@ class HeterodynedDoubleTransientLikelihoodFD(DoubleTransientLikelihoodFD):
                 * align_time_center_2
             )
 
-            ### Old implementations
-            # r0_1 = waveform_center_1 / self.waveform_center_ref_1[detector.name]
-            # r0_2 = waveform_center_2 / self.waveform_center_ref_2[detector.name]
-            # r0 = r0_1 + r0_2
-            
-            # r1_1 = (waveform_low_1 / self.waveform_low_ref_1[detector.name] - r0_1) / (
-            #     frequencies_low - frequencies_center
-            # )
-            # r1_2 = (waveform_low_2 / self.waveform_low_ref_2[detector.name] - r0_2) / (
-            #     frequencies_low - frequencies_center
-            # )
-            # r1 = r1_1 + r1_2
-            
-            ### New implementation
             waveform_center = waveform_center_1 + waveform_center_2
             waveform_low = waveform_low_1 + waveform_low_2
             
