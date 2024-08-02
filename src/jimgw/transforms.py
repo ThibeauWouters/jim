@@ -20,7 +20,7 @@ def sin_dec_to_dec(params: dict) -> dict:
 def H0_z_to_dL(params: dict):
     H0, z = params["H_0"], params["z"]
     c = 299792458.0 / 1e3 # TODO: improve this, but only testing for now
-    d_L = z / H0 * c
+    d_L = c * z / H0
     return {"d_L": d_L}
 
 default_functions = {"q_to_eta": q_to_eta,
