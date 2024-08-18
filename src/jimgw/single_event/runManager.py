@@ -12,10 +12,10 @@ from jaxtyping import Array, Float, PyTree
 from jimgw import prior
 from jimgw.base import RunManager
 from jimgw.jim import Jim
+from jimgw.transforms import Transform
 from jimgw.single_event.detector import Detector, detector_preset
-from jimgw.single_event.likelihood import SingleEventLiklihood, likelihood_presets
+from jimgw.single_event.likelihood import SingleEventLikelihood, likelihood_presets
 from jimgw.single_event.waveform import Waveform, waveform_preset
-
 
 def jaxarray_representer(dumper: yaml.Dumper, data: ArrayImpl):
     return dumper.represent_list(data.tolist())
@@ -24,41 +24,15 @@ def jaxarray_representer(dumper: yaml.Dumper, data: ArrayImpl):
 yaml.add_representer(ArrayImpl, jaxarray_representer)  # type: ignore
 
 prior_presets = {
-    "Unconstrained_Uniform": prior.Unconstrained_Uniform,
-    "Uniform": prior.Uniform,
-    "Sphere": prior.Sphere,
-    "AlignedSpin": prior.AlignedSpin,
-    "PowerLaw": prior.PowerLaw,
-    "Composite": prior.Composite,
-    "MassRatio": lambda **kwargs: prior.Uniform(
-        0.125,
-        1.0,
-        naming=["q"],
-        transforms={"q": ("eta", lambda params: params["q"] / (1 + params["q"]) ** 2)},
-    ),
-    "CosIota": lambda **kwargs: prior.Uniform(
-        -1.0,
-        1.0,
-        naming=["cos_iota"],
-        transforms={
-            "cos_iota": (
-                "iota",
-                lambda params: jnp.arccos(params["cos_iota"]),
-            )
-        },
-    ),
-    "SinDec": lambda **kwargs: prior.Uniform(
-        -1.0,
-        1.0,
-        naming=["sin_dec"],
-        transforms={
-            "sin_dec": (
-                "dec",
-                lambda params: jnp.arcsin(params["sin_dec"]),
-            )
-        },
-    ),
-    "EarthFrame": prior.EarthFrame,
+    # "Unconstrained_Uniform": prior.Unconstrained_Uniform, # TODO: this is removed?
+    "Uniform": prior.UniformPrior,
+    "Sphere": prior.UniformSpherePrior,
+    # "AlignedSpin": prior.AlignedSpinPrior, # TODO: this was removed?
+    "PowerLaw": prior.PowerLawPrior,
+    "Combine": prior.CombinePrior,
+    "Cosine": prior.CosinePrior,
+    "Sine": prior.SinePrior,
+    # "EarthFrame": prior.EarthFrame, # TODO: this was removed?
 }
 
 
@@ -70,6 +44,9 @@ class SingleEventRun:
     priors: dict[
         str, dict[str, Union[str, float, int, bool]]
     ]  # Transform cannot be included in this way, add it to preset if used often.
+    sample_transforms: dict[
+        str, dict[str, Union[str, float, int, bool]]
+    ]  # Transform cannot be included in this way, add it to preset if used often.
     jim_parameters: dict[str, Union[str, float, int, bool, dict]]
     injection_parameters: dict[str, float]
     injection: bool = False
@@ -79,13 +56,14 @@ class SingleEventRun:
     waveform_parameters: dict[str, Union[str, float, int, bool]] = field(
         default_factory=lambda: {"name": ""}
     )
+    
     data_parameters: dict[str, Union[float, int]] = field(
         default_factory=lambda: {
             "trigger_time": 0.0,
-            "duration": 0,
-            "post_trigger_duration": 0,
-            "f_min": 0.0,
-            "f_max": 0.0,
+            "duration": 4.0,
+            "post_trigger_duration": 2.0,
+            "f_min": 20.0,
+            "f_max": 2048.0,
             "tukey_alpha": 0.2,
             "f_sampling": 4096.0,
         }
@@ -94,6 +72,7 @@ class SingleEventRun:
 
 class SingleEventPERunManager(RunManager):
     run: SingleEventRun
+    likelihood: SingleEventLikelihood
     jim: Jim
 
     @property
@@ -112,20 +91,28 @@ class SingleEventPERunManager(RunManager):
     def psds(self):
         return self.run.detectors
 
-    def __init__(self, **kwargs):
-        if "run" in kwargs:
+    def __init__(self, 
+                 run: SingleEventRun = None,
+                 path: str = None):
+        if run is not None:
             print("Run instance provided. Loading from instance.")
-            self.run = kwargs["run"]
-        elif "path" in kwargs:
+            self.run = run
+        elif path is not None:
             print("Run instance not provided. Loading from path.")
-            self.run = self.load_from_path(kwargs["path"])
+            self.run = self.load_from_path(path)
         else:
             print("Neither run instance nor path provided.")
             raise ValueError
 
         local_prior = self.initialize_prior()
         local_likelihood = self.initialize_likelihood(local_prior)
-        self.jim = Jim(local_likelihood, local_prior, **self.run.jim_parameters)
+        sample_transforms = self.initialize_sample_transforms()
+        likelihood_transforms = self.initialize_likelihood_transforms()
+        self.jim = Jim(local_likelihood, 
+                       local_prior,
+                       sample_transforms,
+                       likelihood_transforms,
+                       **self.run.jim_parameters)
 
     def save(self, path: str):
         output_dict = asdict(self.run)
@@ -139,7 +126,7 @@ class SingleEventPERunManager(RunManager):
 
     ### Initialization functions ###
 
-    def initialize_likelihood(self, prior: prior.Prior) -> SingleEventLiklihood:
+    def initialize_likelihood(self, prior: prior.Prior) -> SingleEventLikelihood:
         """
         Since prior contains information about types, naming and ranges of parameters,
         some of the likelihood class require the prior to be initialized, such as the
@@ -195,18 +182,29 @@ class SingleEventPERunManager(RunManager):
         for name, parameters in self.run.priors.items():
             if parameters["name"] not in prior_presets:
                 raise ValueError(f"Prior {name} not recognized.")
-            if parameters["name"] == "EarthFrame":
-                priors.append(
-                    prior.EarthFrame(
-                        gps=self.run.data_parameters["trigger_time"],
-                        ifos=self.run.detectors,
-                    )
-                )
-            else:
-                priors.append(
-                    prior_presets[parameters["name"]](naming=[name], **parameters)
-                )
-        return prior.Composite(priors)
+            # TODO: remove this?
+            # if parameters["name"] == "EarthFrame":
+            #     priors.append(
+            #         prior.EarthFrame(
+            #             gps=self.run.data_parameters["trigger_time"],
+            #             ifos=self.run.detectors,
+            #         )
+            #     )
+            # else:
+            priors.append(
+                prior_presets[parameters["name"]](naming=[name], **parameters)
+            )
+        return prior.CombinePrior(priors)
+    
+    def initialize_sample_transforms(self) -> list[Transform]:
+        sample_transforms = []
+        for name, parameters in self.run.sample_transforms.items():
+            if parameters["name"] not in prior_presets:
+                raise ValueError(f"Prior {name} not recognized.")
+            sample_transforms.append(
+                sample_transforms[parameters["name"]](naming=[name], **parameters)
+            )
+        return sample_transforms
 
     def initialize_detector(self) -> list[Detector]:
         """
