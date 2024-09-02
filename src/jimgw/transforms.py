@@ -4,7 +4,7 @@ from typing import Callable
 import jax
 import jax.numpy as jnp
 from beartype import beartype as typechecker
-from jaxtyping import Float, Array, jaxtyped
+from jaxtyping import Float, Array, Union, jaxtyped
 
 
 class Transform(ABC):
@@ -21,16 +21,28 @@ class Transform(ABC):
     ):
         self.name_mapping = name_mapping
 
-    def propagate_name(self, x: list[str]) -> list[str]:
-        input_set = set(x)
-        from_set = set(self.name_mapping[0])
-        to_set = set(self.name_mapping[1])
-        return list(input_set - from_set | to_set)
-
 
 class NtoMTransform(Transform):
 
     transform_func: Callable[[dict[str, Float]], dict[str, Float]]
+    
+    def __init__(self, 
+                 name_mapping: tuple[list[str], list[str]],
+                 keep_names: Union[list[str], str] = []):
+        
+        super().__init__(name_mapping)
+        if keep_names == "all":
+            print("Keeping all names!")
+            keep_names = name_mapping[0]
+        self.keep_names = keep_names
+        # TODO: add keep names everywhere below
+
+    def propagate_name(self, x: list[str]) -> list[str]:
+        input_set = set(x)
+        from_set = set(self.name_mapping[0])
+        to_set = set(self.name_mapping[1])
+        keep_set = set(self.keep_names)
+        return list(input_set - from_set | keep_set | to_set)
 
     def forward(self, x: dict[str, Float]) -> dict[str, Float]:
         """
@@ -55,6 +67,10 @@ class NtoMTransform(Transform):
         jax.tree.map(
             lambda key: x_copy.update({key: output_params[key]}),
             list(output_params.keys()),
+        )
+        jax.tree.map(
+            lambda key: x_copy.update({key: x[key]}),
+            self.keep_names,
         )
         return x_copy
 

@@ -13,3 +13,5 @@ EARTH_SEMI_MINOR_AXIS = 6356752.314  # in m
 
 DAYSID_SI = 86164.09053133354
 DAYJUL_SI = 86400.0
+
+H0 = 67.4  # Hubble constant in km/s/Mpc

@@ -428,6 +428,8 @@ class GroundBased2G(Detector):
             psd_vals = asd_vals**2
         else:
             f, psd_vals = np.loadtxt(psd_file, unpack=True)
+            f = jnp.array(f)
+            psd_vals = jnp.array(psd_vals)
 
         psd = interp1d(f, psd_vals, fill_value=(psd_vals[0], psd_vals[-1]))(freqs)  # type: ignore
         psd = jnp.array(psd)
