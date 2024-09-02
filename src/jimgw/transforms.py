@@ -25,11 +25,13 @@ class Transform(ABC):
 class NtoMTransform(Transform):
 
     transform_func: Callable[[dict[str, Float]], dict[str, Float]]
-    
-    def __init__(self, 
-                 name_mapping: tuple[list[str], list[str]],
-                 keep_names: Union[list[str], str] = []):
-        
+
+    def __init__(
+        self,
+        name_mapping: tuple[list[str], list[str]],
+        keep_names: Union[list[str], str] = [],
+    ):
+
         super().__init__(name_mapping)
         if keep_names == "all":
             print("Keeping all names!")
@@ -105,7 +107,9 @@ class NtoNTransform(NtoMTransform):
         output_params = self.transform_func(transform_params)
         jacobian = jax.jacfwd(self.transform_func)(transform_params)
         jacobian = jnp.array(jax.tree.leaves(jacobian))
-        jacobian = jnp.log(jnp.absolute(jnp.linalg.det(jacobian.reshape(self.n_dim, self.n_dim))))
+        jacobian = jnp.log(
+            jnp.absolute(jnp.linalg.det(jacobian.reshape(self.n_dim, self.n_dim)))
+        )
         jax.tree.map(
             lambda key: x_copy.pop(key),
             self.name_mapping[0],
@@ -142,7 +146,9 @@ class BijectiveTransform(NtoNTransform):
         output_params = self.inverse_transform_func(transform_params)
         jacobian = jax.jacfwd(self.inverse_transform_func)(transform_params)
         jacobian = jnp.array(jax.tree.leaves(jacobian))
-        jacobian = jnp.log(jnp.absolute(jnp.linalg.det(jacobian.reshape(self.n_dim, self.n_dim))))
+        jacobian = jnp.log(
+            jnp.absolute(jnp.linalg.det(jacobian.reshape(self.n_dim, self.n_dim)))
+        )
         jax.tree.map(
             lambda key: y_copy.pop(key),
             self.name_mapping[1],
