@@ -171,17 +171,17 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         
         self.freq_grid_low = freq_grid[:-1]
 
-        print("Finding reference parameters..")
-        self.ref_params = self.maximize_likelihood(
-            bounds=bounds, prior=prior, popsize=popsize, n_loops=n_loops
-        )
+        if ref_params is not None:
+            print("Provided reference parameters:")
+            self.ref_params = ref_params
+        else:
+            print("Finding reference parameters..")
+            self.ref_params = self.maximize_likelihood(
+                bounds=bounds, prior=prior, popsize=popsize, n_loops=n_loops
+            )
         
         print("Ref params found by evosax:")
         print(self.ref_params)
-        
-        if ref_params is not None:
-            print("Overriding with reference parameters:")
-            self.ref_params = ref_params
             
         # Sanity check for lambdas before proceeding:
         if self.ref_params["lambda_1"] <= 0.0 and self.ref_params["lambda_2"] > 0:
