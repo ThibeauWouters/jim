@@ -500,6 +500,109 @@ V1 = GroundBased2G(
     mode="pc",
 )
 
+class TriangularNetwork2G(list):
+    polarization_mode: list[Polarization]
+    frequencies: Float[Array, " n_sample"] = jnp.array([])
+    data: Float[Array, " n_sample"] = jnp.array([[],[],[]])
+    psd: Float[Array, " n_sample"] = jnp.array([])
+    latitude: Float = 0
+    longitude: Float = 0
+    elevation: Float = 0
+    xarm_azimuth: Float = 0
+    yarm_azimuth: Float = 0
+    xarm_tilt: Float = 0
+    yarm_tilt: Float = 0
+    length: Float = 1e4   
+
+    def __init__(self,
+                 name: (str, list) = "ET", 
+                 **kwargs):
+
+        """Class builds a list of a triangular interferometer network.
+            The single detecotor are based on the GroundBased2G class, hence the cursed name
+        """
+
+        super(TriangularNetwork2G,self).__init__([])
+        
+        self.name = name if isinstance(name,list) else [name + str(i) for i in range(1,4)]
+        if len(self.name)!=3:
+            raise ValueError("You must provide a list of the names of the 3 detectors")
+        
+        self.latitude = kwargs.get("latitude", 0)
+        self.longitude = kwargs.get("longitude", 0)
+        self.elevation = kwargs.get("elevation", 0)
+        self.xarm_azimuth = kwargs.get("xarm_azimuth", 0)
+        self.yarm_azimuth = kwargs.get("yarm_azimuth", 0)
+        self.xarm_tilt = kwargs.get("xarm_tilt", 0)
+        self.yarm_tilt = kwargs.get("yarm_tilt", 0)
+
+        modes = kwargs.get("mode", "pc")
+
+        self.polarization_mode = [Polarization(m) for m in modes]
+        self.frequencies = kwargs.get("frequencies",jnp.array)([])
+        self.data = kwargs.get("data",jnp.array([[],[],[]]))
+        self.psd = kwargs.get("psd", jnp.array([]))
+
+        latitude = self.latitude
+        longitude = self.longitude
+
+        xarm_azimuth = self.xarm_azimuth
+        yarm_azimuth = self.yarm_azimuth
+
+        # Taking into accoutn that the earth is an ellipsoid and getting 
+        # the right radius
+        a = EARTH_SEMI_MAJOR_AXIS/1e3 # Numerical insabilbity avoidance
+        b = EARTH_SEMI_MINOR_AXIS/1e3
+        earth_approx_radius = a*b /(np.sqrt(
+                                    a**(2) * np.sin(latitude)**2 +
+                                    b**(2) * np.cos(latitude)**2
+                                ))
+        earth_approx_radius *=1e3
+        
+        for i in range(3):
+            self.append(
+                GroundBased2G(
+                    name[i],
+                    latitude = latitude,
+                    longitude = longitude,
+                    xarm_azimuth = xarm_azimuth,
+                    yarm_azimuth = yarm_azimuth,
+                    elevation = self.elevation,
+                    xarm_tilt = self.xarm_tilt,
+                    yarm_tilt = self.yarm_tilt,
+                    polarization_mode = self.polarization_mode,
+                    frequencies = self.frequencies,
+                    data = self.data[i],
+                    psd = self.psd,
+
+                )
+            )
+
+            # Rotate arms 
+            xarm_azimuth += (4/3)*np.pi
+            yarm_azimuth += (4/3)*np.pi
+
+            # The detector is taken as a chord that cuts across the earth
+            latitude +=  2 * np.arcsin(
+                0.5 * self.length * np.sin(xarm_azimuth) / earth_approx_radius
+                )
+
+            longitude += 2 * np.arcsin(
+                0.5 * self.length * np.cos(xarm_azimuth) / earth_approx_radius
+                )
+
+ET = TriangularNetwork2G(
+    ["E1","E2","E3"],
+    latitude=(43 + 37.0 / 60 + 53.0921 / 3600) * DEG_TO_RAD,
+    longitude=(10 + 30.0 / 60 + 16.1887 / 3600) * DEG_TO_RAD,
+    xarm_azimuth=70.5674 * DEG_TO_RAD,
+    yarm_azimuth=130.5674 * DEG_TO_RAD,
+    xarm_tilt = 0,
+    yarm_tilt = 0,
+    elevation = 51.884,
+    mode = "pc"
+)
+
 detector_preset = {
     "H1": H1,
     "L1": L1,
