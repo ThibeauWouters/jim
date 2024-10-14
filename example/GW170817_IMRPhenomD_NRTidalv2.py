@@ -1,7 +1,20 @@
+### This is for running on the LIGO CIT cluster
+import psutil
+p = psutil.Process()
+p.cpu_affinity([0])
+
+import os 
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.10"
+### --------------------------------------------
+
 import time
+import json
 
 import jax
 import jax.numpy as jnp
+
+import numpy as np
 
 from jimgw.jim import Jim
 from jimgw.jim import Jim
@@ -15,7 +28,7 @@ from jimgw.prior import (
 )
 from jimgw.single_event.detector import H1, L1, V1
 from jimgw.single_event.likelihood import HeterodynedTransientLikelihoodFD
-from jimgw.single_event.waveform import RippleIMRPhenomPv2
+from jimgw.single_event.waveform import RippleIMRPhenomD_NRTidalv2
 from jimgw.transforms import BoundToUnbound
 from jimgw.single_event.transforms import (
     SkyFrameToDetectorFrameSkyPositionTransform,
@@ -51,20 +64,31 @@ f_ref = fmin
 
 ifos = [H1, L1, V1]
 
+### Load the pre-processed data
 
-tukey_alpha = 2 / (duration / 2)
-H1.load_data(
-    gps, duration, 2, fmin, fmax, psd_pad=duration + 16, tukey_alpha=tukey_alpha
-)
-L1.load_data(
-    gps, duration, 2, fmin, fmax, psd_pad=duration + 16, tukey_alpha=tukey_alpha
-)
-V1.load_data(
-    gps, duration, 2, fmin, fmax, psd_pad=duration + 16, tukey_alpha=tukey_alpha
-)
+data_path = "./data/GW170817/"
+
+# This is our preprocessed data obtained from the TXT files at the GWOSC website (the GWF gave me NaNs?)
+H1.frequencies = jnp.array(np.genfromtxt(f'{data_path}H1_freq.txt'))
+H1_data_re, H1_data_im = np.genfromtxt(f'{data_path}H1_data_re.txt'), np.genfromtxt(f'{data_path}H1_data_im.txt')
+H1.data = jnp.array(H1_data_re + 1j * H1_data_im)
+
+L1.frequencies = jnp.array(np.genfromtxt(f'{data_path}L1_freq.txt'))
+L1_data_re, L1_data_im = np.genfromtxt(f'{data_path}L1_data_re.txt'), np.genfromtxt(f'{data_path}L1_data_im.txt')
+L1.data = jnp.array(L1_data_re + 1j * L1_data_im)
+
+V1.frequencies = jnp.array(np.genfromtxt(f'{data_path}V1_freq.txt'))
+V1_data_re, V1_data_im = np.genfromtxt(f'{data_path}V1_data_re.txt'), np.genfromtxt(f'{data_path}V1_data_im.txt')
+V1.data = jnp.array(V1_data_re + 1j * V1_data_im)
+
+# Load the PSD
+
+H1.psd = H1.load_psd(H1.frequencies, psd_file = data_path + "H1_psd.txt")
+L1.psd = L1.load_psd(L1.frequencies, psd_file = data_path + "L1_psd.txt")
+V1.psd = V1.load_psd(V1.frequencies, psd_file = data_path + "V1_psd.txt")
 
 
-waveform = RippleIMRPhenomPv2(f_ref=f_ref)
+waveform = RippleIMRPhenomD_NRTidalv2(f_ref=f_ref)
 
 ###########################################
 ########## Set up priors ##################
@@ -81,13 +105,21 @@ q_prior = UniformPrior(q_min, q_max, parameter_names=["q"])
 prior = prior + [Mc_prior, q_prior]
 
 # Spin prior
-s1_prior = UniformSpherePrior(parameter_names=["s1"], max_mag = 0.05)
-s2_prior = UniformSpherePrior(parameter_names=["s2"], max_mag = 0.05)
+spin_min, spin_max = -0.05, 0.05
+s1_prior = UniformPrior(spin_min, spin_max, parameter_names=["s1_z"])
+s2_prior = UniformPrior(spin_min, spin_max, parameter_names=["s2_z"])
 iota_prior = SinePrior(parameter_names=["iota"])
+
+# Lambda prior
+lambda_min, lambda_max = 0.0, 5000.0
+lambda1_prior = UniformPrior(lambda_min, lambda_max, parameter_names=["lambda_1"])
+lambda2_prior = UniformPrior(lambda_min, lambda_max, parameter_names=["lambda_2"])
 
 prior = prior + [
     s1_prior,
     s2_prior,
+    lambda1_prior,
+    lambda2_prior,
     iota_prior,
 ]
 
@@ -119,13 +151,11 @@ sample_transforms = [
     SkyFrameToDetectorFrameSkyPositionTransform(gps_time=gps, ifos=ifos),
     BoundToUnbound(name_mapping = (["M_c"], ["M_c_unbounded"]), original_lower_bound=M_c_min, original_upper_bound=M_c_max),
     BoundToUnbound(name_mapping = (["q"], ["q_unbounded"]), original_lower_bound=q_min, original_upper_bound=q_max),
-    BoundToUnbound(name_mapping = (["s1_phi"], ["s1_phi_unbounded"]) , original_lower_bound=0.0, original_upper_bound=2 * jnp.pi),
-    BoundToUnbound(name_mapping = (["s2_phi"], ["s2_phi_unbounded"]) , original_lower_bound=0.0, original_upper_bound=2 * jnp.pi),
     BoundToUnbound(name_mapping = (["iota"], ["iota_unbounded"]) , original_lower_bound=0.0, original_upper_bound=jnp.pi),
-    BoundToUnbound(name_mapping = (["s1_theta"], ["s1_theta_unbounded"]) , original_lower_bound=0.0, original_upper_bound=jnp.pi),
-    BoundToUnbound(name_mapping = (["s2_theta"], ["s2_theta_unbounded"]) , original_lower_bound=0.0, original_upper_bound=jnp.pi),
-    BoundToUnbound(name_mapping = (["s1_mag"], ["s1_mag_unbounded"]) , original_lower_bound=0.0, original_upper_bound=0.05),
-    BoundToUnbound(name_mapping = (["s2_mag"], ["s2_mag_unbounded"]) , original_lower_bound=0.0, original_upper_bound=0.05),
+    BoundToUnbound(name_mapping = (["s1_z"], ["s1_z_unbounded"]) , original_lower_bound=spin_min, original_upper_bound=spin_max),
+    BoundToUnbound(name_mapping = (["s2_z"], ["s2_z_unbounded"]) , original_lower_bound=spin_min, original_upper_bound=spin_max),
+    BoundToUnbound(name_mapping = (["lambda_1"], ["lambda_1_unbounded"]) , original_lower_bound=lambda_min, original_upper_bound=lambda_max),
+    BoundToUnbound(name_mapping = (["lambda_2"], ["lambda_2_unbounded"]) , original_lower_bound=lambda_min, original_upper_bound=lambda_max),
     BoundToUnbound(name_mapping = (["phase_det"], ["phase_det_unbounded"]), original_lower_bound=0.0, original_upper_bound=2 * jnp.pi),
     BoundToUnbound(name_mapping = (["psi"], ["psi_unbounded"]), original_lower_bound=0.0, original_upper_bound=jnp.pi),
     BoundToUnbound(name_mapping = (["zenith"], ["zenith_unbounded"]), original_lower_bound=0.0, original_upper_bound=jnp.pi),
@@ -134,16 +164,19 @@ sample_transforms = [
 
 likelihood_transforms = [
     MassRatioToSymmetricMassRatioTransform,
-    SphereSpinToCartesianSpinTransform("s1"),
-    SphereSpinToCartesianSpinTransform("s2"),
 ]
 
-
-#likelihood = TransientLikelihoodFD(
-#    [H1, L1, V1], waveform=waveform, trigger_time=trigger_time, duration=duration, post_trigger_duration=post_trigger_duration
-#)
-
-likelihood = HeterodynedTransientLikelihoodFD(ifos, waveform=waveform, n_bins = 1000, trigger_time=trigger_time, duration=duration, post_trigger_duration=post_trigger_duration, prior = prior, sample_transforms = sample_transforms, likelihood_transforms = likelihood_transforms, popsize = 10, n_steps = 50)
+likelihood = HeterodynedTransientLikelihoodFD(ifos, 
+                                              waveform=waveform, 
+                                              n_bins = 1_000, 
+                                              trigger_time=trigger_time, 
+                                              duration=duration, 
+                                              post_trigger_duration=post_trigger_duration, 
+                                              prior = prior, 
+                                              sample_transforms = sample_transforms, 
+                                              likelihood_transforms = likelihood_transforms, 
+                                              popsize = 10, 
+                                              n_steps = 50)
 
 mass_matrix = jnp.eye(prior.n_dim)
 # mass_matrix = mass_matrix.at[1, 1].set(1e-3)
@@ -155,7 +188,7 @@ Adam_optimizer = optimization_Adam(n_steps=3000, learning_rate=0.01, noise_level
 import optax
 
 n_epochs = 20
-n_loop_training = 100
+n_loop_training = 50
 total_epochs = n_epochs * n_loop_training
 start = total_epochs // 10
 learning_rate = optax.polynomial_schedule(
@@ -171,7 +204,7 @@ jim = Jim(
     n_loop_production=20,
     n_local_steps=10,
     n_global_steps=1000,
-    n_chains=500,
+    n_chains=1_000,
     n_epochs=n_epochs,
     learning_rate=learning_rate,
     n_max_examples=30000,
@@ -188,3 +221,10 @@ jim = Jim(
 
 
 jim.sample(jax.random.PRNGKey(42))
+output_samples = jim.get_samples()
+
+# Save with JSON
+with open("GW170817_IMRPhenomD_NRTidalv2.json", "w") as f:
+    json.dump(output_samples, f)
+    
+print("DONE")

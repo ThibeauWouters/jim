@@ -1,6 +1,15 @@
-import time
+import psutil
+p = psutil.Process()
+p.cpu_affinity([0])
 
+import os 
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.35"
+
+import time
+import json
 import jax
+print(f"JAX devices: {jax.devices()}")
 import jax.numpy as jnp
 
 from jimgw.jim import Jim
@@ -138,7 +147,7 @@ Adam_optimizer = optimization_Adam(n_steps=3000, learning_rate=0.01, noise_level
 import optax
 
 n_epochs = 20
-n_loop_training = 100
+n_loop_training = 50
 total_epochs = n_epochs * n_loop_training
 start = total_epochs // 10
 learning_rate = optax.polynomial_schedule(
@@ -171,3 +180,11 @@ jim = Jim(
 
 
 jim.sample(jax.random.PRNGKey(42))
+
+output_samples = jim.get_samples()
+
+# Save with JSON
+with open("GW150914_IMRPhenomPV2.json", "w") as f:
+    json.dump(output_samples, f)
+    
+print("DONE")
