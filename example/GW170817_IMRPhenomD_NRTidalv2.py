@@ -4,13 +4,11 @@ p = psutil.Process()
 p.cpu_affinity([0])
 
 import os 
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.10"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.20"
 ### --------------------------------------------
 
 import time
-import json
-
 import jax
 import jax.numpy as jnp
 
@@ -188,7 +186,8 @@ Adam_optimizer = optimization_Adam(n_steps=3000, learning_rate=0.01, noise_level
 import optax
 
 n_epochs = 20
-n_loop_training = 50
+n_loop_training = 100
+n_loop_production = 10
 total_epochs = n_epochs * n_loop_training
 start = total_epochs // 10
 learning_rate = optax.polynomial_schedule(
@@ -201,7 +200,7 @@ jim = Jim(
     sample_transforms=sample_transforms,
     likelihood_transforms=likelihood_transforms,
     n_loop_training=n_loop_training,
-    n_loop_production=20,
+    n_loop_production=n_loop_production,
     n_local_steps=10,
     n_global_steps=1000,
     n_chains=1_000,
@@ -221,10 +220,10 @@ jim = Jim(
 
 
 jim.sample(jax.random.PRNGKey(42))
+jim.print_summary()
+
 output_samples = jim.get_samples()
 
-# Save with JSON
-with open("GW170817_IMRPhenomD_NRTidalv2.json", "w") as f:
-    json.dump(output_samples, f)
-    
+jnp.savez("../../jim_testing/integration/output_samples.npz", **output_samples)
+
 print("DONE")
