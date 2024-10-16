@@ -164,6 +164,22 @@ likelihood_transforms = [
     MassRatioToSymmetricMassRatioTransform,
 ]
 
+# ref_params = None
+
+ref_params = {'psi': 2.9430815456758737,
+              'lambda_2': 1784.9572214351485,
+              'lambda_1': 2820.6636467729086,
+              's2_z': 0.014321173243660557,
+              's1_z': 0.007049740182150072,
+              'iota': 1.502136333997165,
+              'M_c': 1.2056856321012765,
+              'ra': 4.626710286618594,
+              'dec': 0.9258266156231464,
+              't_c': -0.07739755547687856,
+              'phase_c': 2.2003355435784435,
+              'd_L': 59.46702189170625,
+              'eta': 0.22892616100377644}
+
 likelihood = HeterodynedTransientLikelihoodFD(ifos, 
                                               waveform=waveform, 
                                               n_bins = 1_000, 
@@ -173,13 +189,14 @@ likelihood = HeterodynedTransientLikelihoodFD(ifos,
                                               prior = prior, 
                                               sample_transforms = sample_transforms, 
                                               likelihood_transforms = likelihood_transforms, 
+                                              ref_params = ref_params,
                                               popsize = 10, 
                                               n_steps = 50)
 
 mass_matrix = jnp.eye(prior.n_dim)
 # mass_matrix = mass_matrix.at[1, 1].set(1e-3)
 # mass_matrix = mass_matrix.at[9, 9].set(1e-3)
-local_sampler_arg = {"step_size": mass_matrix * 1e-3}
+local_sampler_arg = {"step_size": mass_matrix * 1e-4}
 
 Adam_optimizer = optimization_Adam(n_steps=3000, learning_rate=0.01, noise_level=1)
 
@@ -187,7 +204,7 @@ import optax
 
 n_epochs = 20
 n_loop_training = 100
-n_loop_production = 10
+n_loop_production = 20
 total_epochs = n_epochs * n_loop_training
 start = total_epochs // 10
 learning_rate = optax.polynomial_schedule(
