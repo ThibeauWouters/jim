@@ -398,8 +398,8 @@ class GroundBased2G(Detector):
         self.psd = self.load_psd(freqs, psd_file)
         key, subkey = jax.random.split(key, 2)
         var = self.psd / (4 * (freqs[1] - freqs[0]))
-        noise_real = jax.random.normal(key, shape=freqs.shape) * jnp.sqrt(var / 2.0)
-        noise_imag = jax.random.normal(subkey, shape=freqs.shape) * jnp.sqrt(var / 2.0)
+        noise_real = jax.random.normal(key, shape=freqs.shape) * jnp.sqrt(var)
+        noise_imag = jax.random.normal(subkey, shape=freqs.shape) * jnp.sqrt(var)
         align_time = jnp.exp(
             -1j * 2 * jnp.pi * freqs * (params["epoch"] + params["t_c"])
         )
