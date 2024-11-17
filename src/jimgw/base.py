@@ -39,6 +39,7 @@ class LikelihoodBase(ABC):
 
     _model: object
     _data: object
+    required_keys: list[str]
 
     @property
     def model(self):

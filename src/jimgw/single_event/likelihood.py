@@ -44,6 +44,7 @@ class TransientLikelihoodFD(SingleEventLiklihood):
         ), "The detectors must have the same frequency grid"
         self.frequencies = self.detectors[0].frequencies  # type: ignore
         self.waveform = waveform
+        self.required_keys = waveform.required_keys + ["t_c", "psi", "ra", "dec"]
         self.trigger_time = trigger_time
         self.gmst = (
             Time(trigger_time, format="gps").sidereal_time("apparent", "greenwich").rad
@@ -171,17 +172,14 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         
         self.freq_grid_low = freq_grid[:-1]
 
-        print("Finding reference parameters..")
-        self.ref_params = self.maximize_likelihood(
-            bounds=bounds, prior=prior, popsize=popsize, n_loops=n_loops
-        )
-        
-        print("Ref params found by evosax:")
-        print(self.ref_params)
-        
         if ref_params is not None:
-            print("Overriding with reference parameters:")
+            print("Using provided reference parameters:")
             self.ref_params = ref_params
+        else:
+            print("Finding reference parameters . . .")
+            self.ref_params = self.maximize_likelihood(
+                bounds=bounds, prior=prior, popsize=popsize, n_loops=n_loops
+            )
             
         # Sanity check for lambdas before proceeding:
         if self.ref_params["lambda_1"] <= 0.0 and self.ref_params["lambda_2"] > 0:
