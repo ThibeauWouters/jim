@@ -150,7 +150,10 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         )
         
         if reference_waveform is None:
+            print("No reference waveform provided. Using the waveform provided.")
             reference_waveform = self.waveform
+        else:
+            print("NOTE: we are given a reference waveform!")
             
         self.reference_waveform = reference_waveform
         self.outdir_name = outdir_name
@@ -418,6 +421,15 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         f_bins_center: Float[Array, "n_bins"]
             The bin centers.
         """
+        
+        # ### Epsilon method to compare against relative binning in bilby
+        
+        # print("Comparing against relative binning in bilby")
+        # epsilon = 0.05
+        # phase_diff_array = self.max_phase_diff(freqs, freqs[0], freqs[-1], chi=chi)
+        # phase_diff_from_start = phase_diff_array - phase_diff_array[0]
+        # expected_n_bins = int(phase_diff_from_start[-1] / epsilon)
+        # print(f"Using {expected_n_bins} bins for relative binning for epsilon {epsilon}")
 
         phase_diff_array = self.max_phase_diff(freqs, freqs[0], freqs[-1], chi=chi)
         bin_f = interp1d(phase_diff_array, freqs)
