@@ -466,7 +466,44 @@ class PowerLaw(Prior):
         )
         log_p = self.alpha * jnp.log(variable) + jnp.log(self.normalization)
         return log_p + log_in_range
+    
+class Normal(Prior):
+    
+    mean: Float = 0.0
+    std: Float = 1.0
+    
+    def __repr__(self):
+        return f"Normal(mean={self.mean}, std={self.std}, naming={self.naming})"
+    
+    def __init__(
+        self,
+        mean: Float,
+        std: Float,
+        naming: list[str],
+        transforms: dict[str, tuple[str, Callable]] = {},
+        **kwargs,
+    ):
+        super().__init__(naming, transforms)
+        self.mean = mean
+        self.std = std
+        
+    def sample(
+        self, rng_key: PRNGKeyArray, n_samples: int
+    ) -> dict[str, Float[Array, " n_samples"]]:
+        samples = jax.random.normal(rng_key, (n_samples,)) * self.std + self.mean
+        return self.add_name(samples[None])
+    
+    def log_prob(self, x: dict[str, Float]) -> Float:
+        variable = x[self.naming[0]]
+        return -0.5 * jnp.log(2 * jnp.pi) - jnp.log(self.std) - 0.5 * ((variable - self.mean) / self.std) ** 2
 
+    @property
+    def xmin(self):
+        return self.mean - 10.0 * self.std
+    
+    @property
+    def xmax(self):
+        return self.mean + 10.0 * self.std
 
 class Composite(Prior):
     priors: list[Prior] = field(default_factory=list)

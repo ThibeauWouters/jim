@@ -9,7 +9,7 @@ from flowMC.sampler.MALA import MALA
 from flowMC.sampler.Gaussian_random_walk import GaussianRandomWalk
 from flowMC.nfmodel.rqSpline import MaskedCouplingRQSpline
 from flowMC.utils.PRNG_keys import initialize_rng_keys
-from flowMC.utils.EvolutionaryOptimizer import EvolutionaryOptimizer
+# from flowMC.utils.EvolutionaryOptimizer import EvolutionaryOptimizer
 # from flowMC.sampler.flowHMC import flowHMC
 
 from jimgw.prior import Prior
@@ -72,25 +72,12 @@ class Jim(object):
                 self.posterior, True, local_sampler_arg
             )  # Remember to add routine to find automated mass matrix
         else:   
-            raise ValueError(f"Local sampler {which_local_sampler} not recognized")
+            raise ValueError(f"Local sampler not recognized")
 
-        flowHMC_params = kwargs.get("flowHMC_params", {})
+        # Initialize the normalizing flow model
         model = MaskedCouplingRQSpline(
             self.Prior.n_dim, self.num_layers, self.hidden_size, self.num_bins, rng_key_set[-1]
         )
-        if len(flowHMC_params) > 0: 
-            global_sampler = flowHMC(
-                self.posterior,
-                True,
-                model,
-                params={
-                    "step_size": flowHMC_params["step_size"],
-                    "n_leapfrog": flowHMC_params["n_leapfrog"],
-                    "condition_matrix": flowHMC_params["condition_matrix"],
-                },
-            )
-        else:
-            global_sampler = None
 
         self.Sampler = Sampler(
             self.Prior.n_dim,
@@ -98,7 +85,6 @@ class Jim(object):
             None,  # type: ignore
             local_sampler,
             model,
-            global_sampler=global_sampler,
             **kwargs,
         )
 
@@ -134,10 +120,11 @@ class Jim(object):
         negative_posterior(initial_guess)
         print("Done compiling")
 
-        print("Starting the optimizer")
-        optimizer = EvolutionaryOptimizer(self.Prior.n_dim, verbose=True)
-        _ = optimizer.optimize(negative_posterior, bounds, n_loops=n_loops)
-        best_fit = optimizer.get_result()[0]
+        raise NotImplementedError("Maximization of likelihood not implemented in flowMC with this jax version")
+        # print("Starting the optimizer")
+        # optimizer = EvolutionaryOptimizer(self.Prior.n_dim, verbose=True)
+        # _ = optimizer.optimize(negative_posterior, bounds, n_loops=n_loops)
+        # best_fit = optimizer.get_result()[0]
         return best_fit
 
     def print_summary(self, transform: bool = True):

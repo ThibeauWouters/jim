@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import numpy as np
 import numpy.typing as npt
 from astropy.time import Time
-from flowMC.utils.EvolutionaryOptimizer import EvolutionaryOptimizer
+# from flowMC.utils.EvolutionaryOptimizer import EvolutionaryOptimizer
 from jaxtyping import Array, Float
 from scipy.interpolate import interp1d
 
@@ -53,6 +53,24 @@ class TransientLikelihoodFD(SingleEventLiklihood):
         self.trigger_time = trigger_time
         self.duration = duration
         self.post_trigger_duration = post_trigger_duration
+        self.kwargs = kwargs 
+        
+        if "fixing_parameters" in self.kwargs:
+            fixing_parameters = self.kwargs["fixing_parameters"]
+            print(f"Parameters are fixed {fixing_parameters}")
+            # TODO: add the marginalization from upstream here as well, for now we only support fixing params
+            # # check for conflict with the marginalization
+            # assert not (
+            #     "t_c" in fixing_parameters and "time" in self.marginalization
+            # ), "Cannot have t_c fixed while having the marginalization of t_c turned on"
+            # assert not (
+            #     "phase_c" in fixing_parameters and "phase" in self.marginalization
+            # ), "Cannot have phase_c fixed while having the marginalization of phase_c turned on"
+            # if the same key exists in both dictionary,
+            # the later one will overwrite the former one
+            self.fixing_func = lambda x: {**x, **fixing_parameters}
+        else:
+            self.fixing_func = lambda x: x
 
     @property
     def epoch(self):
@@ -76,6 +94,8 @@ class TransientLikelihoodFD(SingleEventLiklihood):
         log_likelihood = 0
         frequencies = self.frequencies
         df = frequencies[1] - frequencies[0]
+        # adjust the params due to fixing parameters
+        params = self.fixing_func(params)
         params["gmst"] = self.gmst
         waveform_sky = self.waveform(frequencies, params)
         align_time = jnp.exp(
@@ -143,11 +163,33 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         save_binning_scheme_name: str = "freq_grid",
         reference_waveform: Waveform = None,
         outdir_name: str = "./outdir/",
+        **kwargs
     ) -> None:
         
         super().__init__(
             detectors, waveform, trigger_time, duration, post_trigger_duration
         )
+        
+        self.kwargs = kwargs
+        # the fixing_parameters is expected to be a dictionary
+        # with key as parameter name and value is the fixed value
+        # e.g. {'M_c': 1.1975, 't_c': 0}
+        if "fixing_parameters" in self.kwargs:
+            fixing_parameters = self.kwargs["fixing_parameters"]
+            print(f"Parameters are fixed {fixing_parameters}")
+            # TODO: add the marginalization from upstream
+            # # check for conflict with the marginalization
+            # assert not (
+            #     "t_c" in fixing_parameters and "time" in self.marginalization
+            # ), "Cannot have t_c fixed while having the marginalization of t_c turned on"
+            # assert not (
+            #     "phase_c" in fixing_parameters and "phase" in self.marginalization
+            # ), "Cannot have phase_c fixed while having the marginalization of phase_c turned on"
+            # if the same key exists in both dictionary,
+            # the later one will overwrite the former one
+            self.fixing_func = lambda x: {**x, **fixing_parameters}
+        else:
+            self.fixing_func = lambda x: x
         
         if reference_waveform is None:
             print("No reference waveform provided. Using the waveform provided.")
@@ -183,16 +225,6 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
             self.ref_params = self.maximize_likelihood(
                 bounds=bounds, prior=prior, popsize=popsize, n_loops=n_loops
             )
-            
-        # Sanity check for lambdas before proceeding:
-        if self.ref_params["lambda_1"] <= 0.0 and self.ref_params["lambda_2"] > 0:
-            self.ref_params["lambda_1"] = self.ref_params["lambda_2"]
-        elif self.ref_params["lambda_1"] > 0.0 and self.ref_params["lambda_2"] <= 0:
-            self.ref_params["lambda_2"] = self.ref_params["lambda_1"]
-        elif self.ref_params["lambda_1"] <= 0.0 and self.ref_params["lambda_2"] <= 0:
-            print("WARNIGN: Both lambdas found to be zero or negative. Setting both to 1.0.")
-            self.ref_params["lambda_1"] = 1.0
-            self.ref_params["lambda_2"] = 1.0
             
         print("ref_params for relative binning:")
         print(self.ref_params)
@@ -295,6 +327,8 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         frequencies_low = self.freq_grid_low
         frequencies_center = self.freq_grid_center
         params["gmst"] = self.gmst
+        # adjust the params due to fixing parameters
+        params = self.fixing_func(params)
         waveform_sky_low = self.waveform(frequencies_low, params)
         waveform_sky_center = self.waveform(frequencies_center, params)
         align_time_low = jnp.exp(
@@ -341,6 +375,8 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         frequencies = self.frequencies
         df = frequencies[1] - frequencies[0]
         params["gmst"] = self.gmst
+        # adjust the params due to fixing parameters
+        params = self.fixing_func(params)
         # NOTE: setting the reference waveform to be used here
         waveform_sky = self.reference_waveform(frequencies, params)
         align_time = jnp.exp(
@@ -491,17 +527,18 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         start_time = time.time()
         y = jax.jit(jax.vmap(y))
 
-        print("Starting the optimizer")
-        optimizer = EvolutionaryOptimizer(len(bounds), popsize=popsize, verbose=True)
-        _ = optimizer.optimize(y, bounds, n_loops=n_loops)
-        best_fit = optimizer.get_result()[0]
-        end_time = time.time()
+        raise NotImplementedError("Need to implement the optimizer again for new jax version")
+        # print("Starting the optimizer")
+        # optimizer = EvolutionaryOptimizer(len(bounds), popsize=popsize, verbose=True)
+        # _ = optimizer.optimize(y, bounds, n_loops=n_loops)
+        # best_fit = optimizer.get_result()[0]
+        # end_time = time.time()
         
-        elapsed_time = end_time - start_time
-        with open(f"{self.outdir_name}runtime_evosax.txt", "w") as f:
-            f.write(str(elapsed_time))
-        print(f"Optimization time: {elapsed_time} seconds, {elapsed_time / 60} minutes.")
-        return prior.transform(prior.add_name(best_fit))
+        # elapsed_time = end_time - start_time
+        # with open(f"{self.outdir_name}runtime_evosax.txt", "w") as f:
+        #     f.write(str(elapsed_time))
+        # print(f"Optimization time: {elapsed_time} seconds, {elapsed_time / 60} minutes.")
+        # return prior.transform(prior.add_name(best_fit))
 
 
 likelihood_presets = {
