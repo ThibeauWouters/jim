@@ -207,9 +207,14 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         frequency_original = self.frequencies
         # Get the grid of the relative binning scheme (contains the final endpoint)
         # and the center points
+        
+        start = time.time()
         freq_grid, self.freq_grid_center = self.make_binning_scheme(
             np.array(frequency_original), n_bins
         )
+        end = time.time()
+        
+        print(f"Time for binning scheme: {end - start} seconds")
         if save_binning_scheme:
             filename = f"{save_binning_scheme_location}{save_binning_scheme_name}.npz"
             print(f"Saving the relative binning scheme to {filename}...")
@@ -229,8 +234,8 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         print("ref_params for relative binning:")
         print(self.ref_params)
 
-        print("Constructing reference waveforms..")
-
+        print("Constructing reference waveforms. . .")
+        start = time.time()
         self.ref_params["gmst"] = self.gmst
 
         self.waveform_low_ref = {}
@@ -241,9 +246,12 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         self.B1_array = {}
 
         h_sky = self.reference_waveform(frequency_original, self.ref_params)
+        end = time.time()
+        print(f"Time for reference waveforms: {end - start} seconds")
 
         # Get frequency masks to be applied, for both original
         # and heterodyne frequency grid
+        start = time.time()
         h_amp = jnp.sum(
             jnp.array([jnp.abs(h_sky[key]) for key in h_sky.keys()]), axis=0
         )
@@ -268,6 +276,9 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
 
         h_sky_low = self.reference_waveform(self.freq_grid_low, self.ref_params)
         h_sky_center = self.reference_waveform(self.freq_grid_center, self.ref_params)
+        end = time.time()
+        
+        print(f"Time for h_sky_low and h_sky_center: {end - start} seconds")
 
         # Get phase shifts to align time of coalescence
         align_time = jnp.exp(
@@ -291,7 +302,17 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
             * self.freq_grid_center
             * (self.epoch + self.ref_params["t_c"])
         )
+        
+        print(f"Going to compute the masks . . .")
+        start = time.time()
+        f_index_array = []
+        for i in range(len(freq_grid) - 1):
+            f_index_array.append(np.where((frequency_original >= freq_grid[i]) & (frequency_original < freq_grid[i+1]))[0])
+        end = time.time()
+        
+        print(f"Time taken for f_index_array calculation is {end-start}")
 
+        print(f"Going to compute coefficients . . .")
         for detector in self.detectors:
             # Get the reference waveforms
             waveform_ref = (
@@ -308,14 +329,18 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
                 )
                 * align_time_center
             )
+            start = time.time()
             A0, A1, B0, B1 = self.compute_coefficients(
                 detector.data,
                 waveform_ref,
                 detector.psd,
                 frequency_original,
-                freq_grid,
+                f_index_array, # freq_grid,
                 self.freq_grid_center,
             )
+            end = time.time()
+            
+            print(f"Time for computing coefficients: {end - start} seconds")
 
             self.A0_array[detector.name] = A0[mask_heterodyne_center]
             self.A1_array[detector.name] = A1[mask_heterodyne_center]
@@ -476,7 +501,46 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         return jnp.array(f_bins), jnp.array(f_bins_center)
 
     @staticmethod
-    def compute_coefficients(data, h_ref, psd, freqs, f_bins, f_bins_center):
+    def compute_coefficients(data, h_ref, psd, freqs, f_index_array, f_bins_center):
+
+        df = float(freqs[1] - freqs[0])
+        data_prod = np.array(data * h_ref.conj())
+        self_prod = np.array(h_ref * h_ref.conj())
+        
+        data_prod_div_psd = data_prod / psd
+        self_prod_div_psd = self_prod / psd
+        
+        A0_array = np.empty(len(f_index_array), dtype=complex)
+        A1_array = np.empty(len(f_index_array), dtype=complex)
+        B0_array = np.empty(len(f_index_array), dtype=complex)
+        B1_array = np.empty(len(f_index_array), dtype=complex)
+        
+        start = time.time()
+        for i in range(len(f_index_array)):
+            f_index = f_index_array[i]
+            f_bin_center = f_bins_center[i]
+            
+            # Mask the frequencies
+            freqs_difference = freqs[f_index] - f_bin_center
+            
+            # Mask the data and self products
+            _data_prod_div_psd = data_prod_div_psd[f_index]
+            _self_prod_div_psd = self_prod_div_psd[f_index]
+            
+            # Sum
+            value = 4 * np.sum(_data_prod_div_psd) * df
+            A0_array[i] = value
+            A1_array[i] = 4 * np.sum(_data_prod_div_psd * freqs_difference) * df
+            B0_array[i] = 4 * np.sum(_self_prod_div_psd) * df
+            B1_array[i] = 4 * np.sum(_self_prod_div_psd * freqs_difference) * df
+            
+        end = time.time()
+        print(f"Bin computation time: {end - start} s")
+
+        return A0_array, A1_array, B0_array, B1_array
+
+    @staticmethod
+    def old_compute_coefficients(data, h_ref, psd, freqs, f_bins, f_bins_center):
         A0_array = []
         A1_array = []
         B0_array = []
@@ -513,6 +577,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         B0_array = jnp.array(B0_array)
         B1_array = jnp.array(B1_array)
         return A0_array, A1_array, B0_array, B1_array
+
 
     def maximize_likelihood(
         self,
