@@ -142,6 +142,7 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         save_binning_scheme_name: str = "freq_grid",
         reference_waveform: Waveform = None,
         outdir_name: str = "./outdir/",
+        clip_lambdas: bool = True,
     ) -> None:
         
         super().__init__(
@@ -171,7 +172,19 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         
         self.freq_grid_low = freq_grid[:-1]
         
-        if ref_params is not None:
+        if ref_params is not None and clip_lambdas:
+            # Checking for out of bounds. NOTE: we only check out of bounds for lambda_1 and lambda_2 for SSM
+            for key, bound in zip(ref_params.keys(), bounds):
+                if key not in ["lambda_1", "lambda_2"]:
+                    continue
+                value = ref_params[key]
+                if value < bound[0]:
+                    print(f"WARNING: Reference parameter {key} below lower bound, clipping it.")
+                    ref_params[key] = bound[0]
+                elif value > bound[1]:
+                    print(f"WARNING: Reference parameter {key} above upper bound, clipping it.")
+                    ref_params[key] = bound[1]
+                    
             print("Setting relative binning with given reference parameters:")
             self.ref_params = ref_params
         else:
