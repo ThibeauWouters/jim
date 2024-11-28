@@ -330,12 +330,12 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
                 * align_time_center
             )
             start = time.time()
-            A0, A1, B0, B1 = self.compute_coefficients(
+            A0, A1, B0, B1 = self.old_compute_coefficients(
                 detector.data,
                 waveform_ref,
                 detector.psd,
                 frequency_original,
-                f_index_array, # freq_grid,
+                freq_grid,
                 self.freq_grid_center,
             )
             end = time.time()
