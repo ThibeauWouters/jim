@@ -75,8 +75,9 @@ class Jim(object):
             raise ValueError(f"Local sampler not recognized")
 
         # Initialize the normalizing flow model
+        nf_model_kwargs = kwargs.get("nf_model_kwargs", {})
         model = MaskedCouplingRQSpline(
-            self.Prior.n_dim, self.num_layers, self.hidden_size, self.num_bins, rng_key_set[-1]
+            self.Prior.n_dim, self.num_layers, self.hidden_size, self.num_bins, rng_key_set[-1], **nf_model_kwargs
         )
 
         self.Sampler = Sampler(

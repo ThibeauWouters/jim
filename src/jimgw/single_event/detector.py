@@ -409,6 +409,23 @@ class GroundBased2G(Detector):
         signal = self.fd_response(freqs, h_sky, params) * align_time
         self.data = signal + noise_real + 1j * noise_imag
         
+    def add_signal(self,
+                   h_sky: dict[str, Float[Array, " n_sample"]],
+                   params: dict[str, Float],
+                   ):
+        """Adds a single waveform, without generating extra noise, to the data attribute."""
+        
+        assert hasattr(self, "frequencies"), "Please load data before adding a signal."
+        assert hasattr(self, "psd"), "Please load data before adding a signal."
+        assert len(self.data) > 0, "Please load data before adding a signal."
+        
+        align_time = jnp.exp(
+            -1j * 2 * jnp.pi * self.frequencies * (params["epoch"] + params["t_c"])
+        )
+
+        signal = self.fd_response(self.frequencies, h_sky, params) * align_time
+        self.data += signal
+        
     def load_data_from_frame(self,
                              trigger_time: float,
                              gps_start_pad: int,

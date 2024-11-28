@@ -226,30 +226,15 @@ class Sphere(Prior):
 
     Magnitude is sampled from a uniform distribution.
     """
+    
 
     def __repr__(self):
         return f"Sphere(naming={self.naming})"
 
     def __init__(self, naming: str, **kwargs):
         self.naming = [f"{naming}_theta", f"{naming}_phi", f"{naming}_mag"]
-        self.transforms = {
-            self.naming[0]: (
-                f"{naming}_x",
-                lambda params: jnp.sin(params[self.naming[0]])
-                * jnp.cos(params[self.naming[1]])
-                * params[self.naming[2]],
-            ),
-            self.naming[1]: (
-                f"{naming}_y",
-                lambda params: jnp.sin(params[self.naming[0]])
-                * jnp.sin(params[self.naming[1]])
-                * params[self.naming[2]],
-            ),
-            self.naming[2]: (
-                f"{naming}_z",
-                lambda params: jnp.cos(params[self.naming[0]]) * params[self.naming[2]],
-            ),
-        }
+        # NOTE: this is taken away and put under transforms, identity for now?
+        super().__init__(self.naming, {})
 
     def sample(
         self, rng_key: PRNGKeyArray, n_samples: int
@@ -259,7 +244,7 @@ class Sphere(Prior):
             jax.random.uniform(rng_keys[0], (n_samples,), minval=-1.0, maxval=1.0)
         )
         phi = jax.random.uniform(rng_keys[1], (n_samples,), minval=0, maxval=2 * jnp.pi)
-        mag = jax.random.uniform(rng_keys[2], (n_samples,), minval=0, maxval=1)
+        mag = jax.random.uniform(rng_keys[2], (n_samples,), minval=0.0001, maxval=1)
         return self.add_name(jnp.stack([theta, phi, mag], axis=1).T)
 
     def log_prob(self, x: dict[str, Float]) -> Float:
@@ -268,7 +253,7 @@ class Sphere(Prior):
         mag = x[self.naming[2]]
         output = jnp.where(
             (mag > 1) | (mag < 0) | (phi > 2* jnp.pi) | (phi < 0) | (theta > 1) | (theta < -1),
-            jnp.zeros_like(0) - jnp.inf,
+            jnp.zeros_like(0) - 999999.99,
             jnp.log(mag**2 * jnp.sin(x[self.naming[0]])),
         )
         return output

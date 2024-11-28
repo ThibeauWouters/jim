@@ -515,7 +515,6 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
         B0_array = np.empty(len(f_index_array), dtype=complex)
         B1_array = np.empty(len(f_index_array), dtype=complex)
         
-        start = time.time()
         for i in range(len(f_index_array)):
             f_index = f_index_array[i]
             f_bin_center = f_bins_center[i]
@@ -534,9 +533,6 @@ class HeterodynedTransientLikelihoodFD(TransientLikelihoodFD):
             B0_array[i] = 4 * np.sum(_self_prod_div_psd) * df
             B1_array[i] = 4 * np.sum(_self_prod_div_psd * freqs_difference) * df
             
-        end = time.time()
-        print(f"Bin computation time: {end - start} s")
-
         return A0_array, A1_array, B0_array, B1_array
 
     @staticmethod
