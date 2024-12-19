@@ -92,9 +92,8 @@ class Jim(object):
     def posterior(self, params: Float[Array, " n_dim"], data: dict):
         prior_params = self.Prior.add_name(params.T)
         prior = self.Prior.log_prob(prior_params)
-        return (
-            self.Likelihood.evaluate(self.Prior.transform(prior_params), data) + prior
-        )
+        likelihood_val = self.Likelihood.evaluate(self.Prior.transform(prior_params), data)
+        return likelihood_val + prior
 
     def sample(self, key: PRNGKeyArray, initial_guess: Array = jnp.array([])):
         if initial_guess.size == 0:

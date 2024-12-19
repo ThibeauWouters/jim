@@ -608,6 +608,18 @@ V1 = GroundBased2G(
     mode="pc",
 )
 
+CE = GroundBased2G(
+    "CE",
+    latitude=(46 + 27. / 60 + 18.528 / 3600) * DEG_TO_RAD,
+    longitude=-(119 + 24. / 60 + 27.5657 / 3600) * DEG_TO_RAD,
+    xarm_azimuth=125.9994 * DEG_TO_RAD,
+    yarm_azimuth=215.994 * DEG_TO_RAD,
+    xarm_tilt=-6.195e-4 * DEG_TO_RAD,
+    yarm_tilt=-6.195e-4 * DEG_TO_RAD,   
+    elevation=142.554,
+    mode="pc",
+)
+
 ET = TriangularNetwork2G(
     "ET",
     latitude=(43 + 37.0 / 60 + 53.0921 / 3600) * DEG_TO_RAD,
