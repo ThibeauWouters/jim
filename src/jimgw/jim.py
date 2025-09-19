@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 from flowMC.nfmodel.rqSpline import MaskedCouplingRQSpline
 from flowMC.proposal.MALA import MALA
+from flowMC.proposal.Gaussian_random_walk import GaussianRandomWalk
 from flowMC.Sampler import Sampler
 from flowMC.utils.EvolutionaryOptimizer import EvolutionaryOptimizer
 from jaxtyping import Array, Float, PRNGKeyArray
@@ -63,7 +64,14 @@ class Jim(object):
 
         local_sampler_arg = kwargs.get("local_sampler_arg", {})
 
-        local_sampler = MALA(self.posterior, True, **local_sampler_arg)
+        # Choose the local sampler
+        local_sampler_name = kwargs.get("local_sampler_name", "MALA")
+        print(f"Jim received the local sampler name: {local_sampler_name}")
+        if local_sampler_name == "MALA":
+            local_sampler = MALA(self.posterior, True, **local_sampler_arg)
+        elif local_sampler_name == "GaussianRandomWalk":
+            # TODO: might have to change the step size?
+            local_sampler = GaussianRandomWalk(self.posterior, True, **local_sampler_arg)
 
         rng_key, subkey = jax.random.split(rng_key)
         model = MaskedCouplingRQSpline(
